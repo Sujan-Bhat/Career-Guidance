@@ -1,0 +1,52 @@
+services:
+  mongo:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  web:
+    build: ../backend
+    command: python manage.py runserver 0.0.0.0:8000
+    env_file: ../.env
+    environment:
+      MONGO_URI: mongodb://mongo:27017
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      FRONTEND_URL: http://localhost:3000
+    ports:
+      - "8000:8000"
+    depends_on:
+      - mongo
+      - redis
+
+  celery:
+    build: ../backend
+    command: celery -A config worker -l info
+    env_file: ../.env
+    environment:
+      MONGO_URI: mongodb://mongo:27017
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+    depends_on:
+      - mongo
+      - redis
+
+  frontend:
+    build: ../frontend
+    command: sh -c "npm install && npm run dev"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - web
+
+volumes:
+  mongo_data:

@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "careermind-ml"
+version = "0.1.0"
+description = "CAREERMIND Part B: own model training (FES engine, cascade recommender, DQN agent, career prediction ensemble)"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.26",
+    "pandas>=2.1",
+    "scipy>=1.11",
+    "scikit-learn>=1.3",
+    "torch>=2.1",
+    "networkx>=3.2",
+    "gymnasium>=0.29",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4"]
+
+[tool.setuptools.packages.find]
+include = ["careermind_ml*"]

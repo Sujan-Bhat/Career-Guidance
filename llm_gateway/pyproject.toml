@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "careermind-llm"
+version = "0.1.0"
+description = "CAREERMIND Part A: external LLM API integration (conversational guidance, explanations, quiz generation)"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+providers = [
+    "openai>=1.30",
+    "anthropic>=0.30",
+    "google-generativeai>=0.7",
+]
+dev = ["pytest>=7.4"]
+
+[tool.setuptools.packages.find]
+include = ["careermind_llm*"]

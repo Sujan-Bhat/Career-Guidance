@@ -1,0 +1,9 @@
+base_learners: [random_forest, gradient_boosting, mlp]
+meta_learner: logistic_regression
+cv_folds: 5
+random_forest:
+  n_estimators: 300
+gradient_boosting:
+  n_estimators: 200
+mlp:
+  hidden_layer_sizes: [64, 32]

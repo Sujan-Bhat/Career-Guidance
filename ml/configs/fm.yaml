@@ -1,0 +1,7 @@
+stage1_eligibility_threshold: 0.60
+fm:
+  embedding_dim: 16
+  learning_rate: 0.01
+  epochs: 50
+  batch_size: 256
+  loss: mse

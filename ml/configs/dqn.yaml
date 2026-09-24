@@ -1,0 +1,16 @@
+state_dim: 17
+n_actions: 8
+replay_buffer_size: 10000
+target_update_steps: 100
+gamma: 0.99
+epsilon_start: 1.0
+epsilon_end: 0.05
+epsilon_decay_steps: 20000
+batch_size: 64
+learning_rate: 0.0005
+max_episodes: 1000
+reward_weights:
+  alpha: 0.4   # dFES (weekly change in average FES)
+  beta: 0.3    # dSkill (skill-assessment change in recommended domain)
+  gamma: 0.1   # E (binary EngagementSignal)
+  delta: 0.2   # CA (career alignment)

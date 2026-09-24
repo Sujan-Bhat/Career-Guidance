@@ -1,0 +1,19 @@
+submetrics: [tcr, sci, dfet, qap, lrds]
+sci_window_days: 14
+engagement_signal:
+  min_session_minutes: 15
+  min_interactions_per_min: 3
+  min_quiz_attempt_rate: 0.6
+weight_calibration:
+  min_sessions: 8
+  min_graded_outcomes: 2
+  min_nonmissing_per_submetric: 3
+  fallback: population
+lrds_dwell_thresholds_seconds:
+  video: 300
+  article: 180
+  exercise: 240
+  interactive: 240
+dfet:
+  rapid_switch_threshold_seconds: 30
+  idle_threshold_seconds: 120
