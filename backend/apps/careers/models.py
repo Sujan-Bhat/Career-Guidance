@@ -18,6 +18,8 @@ class CareerPathway(Document):
     prerequisites = fields.ListField(fields.EmbeddedDocumentField(SkillPrerequisite))
     typical_courses = fields.ListField(fields.StringField())
 
+    meta = {"collection": "career_pathways", "allow_inheritance": False}
+
 
 class CareerPrediction(Document):
     """Confidence-ranked probability distribution over career categories

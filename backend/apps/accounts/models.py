@@ -35,3 +35,5 @@ class StudentProfile(Document):
     skill_assessments = fields.ListField(fields.EmbeddedDocumentField(SkillAssessment))
     career_preferences = fields.ListField(fields.EmbeddedDocumentField(CareerPreference))
     created_at = fields.DateTimeField()
+
+    meta = {"collection": "profiles", "allow_inheritance": False}

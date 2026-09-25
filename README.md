@@ -34,7 +34,7 @@ The project has two AI parts, deliberately decoupled:
 | `backend/` | Django REST Framework APIs; loads trained model artifacts; serves both Part A and Part B | Sec. V, VI |
 | `ml/` | **Part B** — own model training: FES engine, cascade recommender, DQN agent, career ensemble | Sec. V-A–V-D |
 | `llm_gateway/` | **Part A** — external LLM API integration: chat, explanations, quiz generation | NFR07 |
-| `data/` | OULAD ingestion, synthetic student simulator, career knowledge-graph seed, Mongo seeding | Sec. VIII |
+| `data/` | OULAD downloader + schema mapper, synthetic student simulator (latent parameters, OULAD-calibrated), career knowledge-graph seed, Mongo seeder | Sec. VIII |
 | `evaluation/` | Pilot-study benchmarks, metrics (P@k / R@k / nDCG@k), sensitivity analysis | Sec. VII–VIII |
 | `infra/` | docker-compose (web, frontend, mongo, redis, celery) | Sec. VI |
 | `docs/` | Architecture description (Fig. 1) | Sec. V |
@@ -54,7 +54,7 @@ careermind/
 ├── backend/       # Django REST API (8 apps under apps/)
 ├── ml/            # Part B: careermind_ml training package + configs + tests
 ├── llm_gateway/   # Part A: careermind_llm package (provider adapters)
-├── data/          # OULAD downloader, simulator, careers_seed.json, Mongo seeder
+├── data/          # OULAD downloader + schema mapper, student simulator, careers seed, Mongo seeder
 ├── evaluation/    # metrics, baselines, sensitivity analysis, pilot notebook
 ├── infra/         # docker-compose.yml
 ├── docs/          # architecture.md (Fig. 1)
@@ -106,11 +106,20 @@ pip install -r backend/requirements.txt
 cd backend && python manage.py runserver
 ```
 
-**4. Seed the career knowledge graph into MongoDB**
+**4. Load the data foundation into MongoDB** (Phase 1):
 
 ```bash
-python data/seeds/seed_mongo.py --uri mongodb://localhost:27017 --db careermind
-# -> Seeded: 20 skills, 18 career pathways
+# OULAD: official URLs first, falls back to a verified GitHub mirror
+# (all 7 CSVs match the published row counts)
+python data/oulad/download.py --out data/oulad/raw/
+
+# Map OULAD tables -> CAREERMIND schema (profiles, sessions, events, resources)
+python data/oulad/map_oulad.py --limit-students 200 --with-events
+
+# Seed the career knowledge graph + 200 synthetic students
+# (latent-parameter simulator, calibrated to OULAD marginals)
+python data/seeds/seed_mongo.py --students 200
+# -> 20 skills, 18 career pathways, 200 OULAD + 200 synthetic profiles
 ```
 
 **5. Install and start the frontend** (http://localhost:3000):
@@ -131,11 +140,15 @@ pip install -e "llm_gateway[dev]"  # Part A — provider SDKs optional
 ### What you should see
 
 - **Frontend:** landing page, login, dashboard with the FES score ring,
-  recommendations, career prediction distribution, quiz, and guidance chat.
-  At Phase 0 these are functional page shells awaiting live data.
-- **Backend:** all routes under `/api/v1/…` respond. Stub endpoints return
-  `501 {"detail": "Not implemented (Phase X)"}`; authenticated endpoints return
-  `401` without a JWT — both are the expected Phase 0 behaviour.
+  recommendations, career prediction distribution, quiz, and guidance chat
+  (functional page shells awaiting live data).
+- **Backend:** `GET /api/v1/careers/pathways` returns **real data** — 18 career
+  pathways with skill prerequisites and typical courses (Phase 1). The remaining
+  stub endpoints return `501 {"detail": "Not implemented (Phase X)"}` and
+  authenticated endpoints return `401` without a JWT.
+- **MongoDB** (after the data-foundation steps): 18 career pathways + 20 skills,
+  400 profiles (200 real OULAD + 200 synthetic), ~13.5k behavioural sessions,
+  ~136k events, and 6.3k learning resources.
 
 ## Testing
 
@@ -145,6 +158,8 @@ cd backend && python -m pytest apps
 
 # ML package tests (torch tests skip if torch is absent)
 PYTHONPATH=ml python -m pytest ml/tests
+# includes Phase 1 simulator validation: TCR↔ability, QAP↔motivation and
+# outcome↔ability correlations, determinism, KG eligibility math
 
 # LLM gateway tests (no provider SDKs needed)
 PYTHONPATH=llm_gateway python -m pytest llm_gateway/tests
@@ -165,8 +180,8 @@ replay buffer, target-network sync every 100 steps, Eq. 3 reward weights) live i
 
 ## Roadmap (implementation phases)
 
-0. **Skeleton** (current state) — structure, stubs, docker-compose, seed data
-1. Data foundation — OULAD ingestion, synthetic simulator, knowledge graph
+0. **Skeleton** — structure, stubs, docker-compose, seed data
+1. **Data foundation** (current state) — OULAD ingestion (verified mirror), 200-student synthetic simulator calibrated to OULAD, knowledge-graph loader, pathways API
 2. `ml/fes` — five sub-metrics + Eq. 2 per-student weight calibration
 3. Backend core — auth, behavioural collector, session→FES pipeline
 4. Recommender — KG filtering, FES-weighted CF, FM scoring, cascade API

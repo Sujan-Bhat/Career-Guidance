@@ -17,6 +17,8 @@ class BehaviourSession(Document):
     tasks_started = fields.IntField(default=0)
     tasks_completed = fields.IntField(default=0)
 
+    meta = {"collection": "sessions", "allow_inheritance": False}
+
 
 class BehaviourEvent(Document):
     """Raw interaction event (page_view, resource_open, resource_close,
@@ -29,3 +31,6 @@ class BehaviourEvent(Document):
     resource_id = fields.StringField()
     metadata = fields.DictField()
     timestamp = fields.DateTimeField(required=True)
+
+    meta = {"collection": "events", "allow_inheritance": False}
+

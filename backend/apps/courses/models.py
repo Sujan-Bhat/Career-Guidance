@@ -18,6 +18,8 @@ class Resource(Document):
     title = fields.StringField(required=True)
     type = fields.StringField(choices=("video", "article", "exercise", "interactive"))
 
+    meta = {"collection": "resources", "allow_inheritance": False}
+
 
 class Task(Document):
     course = fields.StringField(required=True)
