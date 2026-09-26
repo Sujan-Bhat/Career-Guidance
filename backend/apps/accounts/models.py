@@ -34,6 +34,17 @@ class StudentProfile(Document):
     academic_records = fields.ListField(fields.EmbeddedDocumentField(AcademicRecord))
     skill_assessments = fields.ListField(fields.EmbeddedDocumentField(SkillAssessment))
     career_preferences = fields.ListField(fields.EmbeddedDocumentField(CareerPreference))
+    source = fields.StringField(default="careermind")  # careermind | simulator | oulad
     created_at = fields.DateTimeField()
 
     meta = {"collection": "profiles", "allow_inheritance": False}
+
+    @property
+    def student_id(self) -> str:
+        """Stable, PII-free identifier used in sessions/events/FES rows (NFR05)."""
+        return str(self.pk)
+
+    @property
+    def is_authenticated(self) -> bool:
+        """Duck-typed user for DRF's IsAuthenticated permission check."""
+        return True

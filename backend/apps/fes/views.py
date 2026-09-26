@@ -6,9 +6,11 @@ from .models import FESScore, FESWeights
 
 
 def _resolve_student(request):
-    """Phase 2 (review mode): the student comes from ?student= or defaults
-    to the first student with FES history. Phase 3 replaces this with the
-    JWT-derived identity."""
+    """JWT identity first; ?student= kept as a documented dev/review fallback;
+    otherwise the first student with FES history."""
+    profile = getattr(request, "user", None)
+    if profile is not None and getattr(profile, "student_id", None):
+        return profile.student_id
     student = request.query_params.get("student")
     if student:
         return student

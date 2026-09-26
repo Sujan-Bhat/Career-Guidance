@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { endpoints } from "@/lib/api/client";
+import { endpoints, isLoggedIn } from "@/lib/api/client";
 
 export type TrackEvent = {
   type:
@@ -35,8 +35,10 @@ export function useTracking() {
 
 /**
  * Client half of the Behavioural Data Collector (paper Sec. V).
- * Buffers events and flushes to POST /api/v1/collector/events/batch every
- * 10 seconds or 20 events. Idle detection via heartbeat gaps arrives in Phase 8.
+ * Opens a server-side session on mount (when logged in), buffers events,
+ * flushes to POST /api/v1/collector/events/batch every 10s / 20 events, and
+ * closes the session on unload via fetch keepalive (sendBeacon can't send
+ * the Authorization header).
  */
 export function TrackingProvider({ children }: { children: React.ReactNode }) {
   const queue = useRef<TrackEvent[]>([]);
@@ -44,7 +46,7 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
   const [flushing, setFlushing] = useState(false);
 
   const flush = useCallback(async () => {
-    if (flushing || queue.current.length === 0) return;
+    if (flushing || queue.current.length === 0 || !sessionId.current) return;
     const batch = queue.current.splice(0, queue.current.length);
     setFlushing(true);
     try {
@@ -61,14 +63,42 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
     if (queue.current.length >= FLUSH_THRESHOLD) void flush();
   }, [flush]);
 
+  // open a session on mount; close it on unload
   useEffect(() => {
-    const interval = setInterval(() => void flush(), FLUSH_INTERVAL_MS);
-    const onUnload = () => void flush();
+    if (!isLoggedIn()) return;
+
+    let cancelled = false;
+    endpoints.collector
+      .startSession()
+      .then(({ data }) => {
+        if (!cancelled) sessionId.current = data.session_id;
+      })
+      .catch(() => {});
+
+    const onUnload = () => {
+      void flush();
+      const id = sessionId.current;
+      if (!id) return;
+      const token = window.localStorage.getItem("cm_access_token");
+      fetch(
+        `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/v1/collector/sessions/${id}/end`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          keepalive: true,
+        }
+      ).catch(() => {});
+    };
     window.addEventListener("beforeunload", onUnload);
+
+    const interval = setInterval(() => void flush(), FLUSH_INTERVAL_MS);
     return () => {
+      cancelled = true;
       clearInterval(interval);
       window.removeEventListener("beforeunload", onUnload);
       void flush();
+      if (sessionId.current) void endpoints.collector.endSession(sessionId.current);
+      sessionId.current = null;
     };
   }, [flush]);
 

@@ -116,7 +116,9 @@ def run_pipeline(
     client = MongoClient(uri or os.getenv("MONGO_URI", "mongodb://localhost:27017"))
     db = client[db_name or os.getenv("MONGO_DB_NAME", "careermind")]
 
-    sessions = list(db.sessions.find({"source": "simulator"}))
+    sessions = list(
+        db.sessions.find({"source": {"$in": ["simulator", "collector"]}})
+    )
     by_student: dict[str, list[dict]] = {}
     for session in sessions:
         by_student.setdefault(session["student"], []).append(session)

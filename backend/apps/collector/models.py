@@ -2,6 +2,10 @@
 
 The collector is the ingestion half of the behavioural pipeline: sessions wrap
 streams of raw interaction events emitted by the frontend tracking SDK.
+
+Collection coexistence: seeded data (source="simulator"/"oulad") and live
+collector data (source="collector") share the `sessions`/`events` collections,
+distinguished by `source`.
 """
 from mongoengine import Document, fields
 
@@ -16,6 +20,16 @@ class BehaviourSession(Document):
     interaction_count = fields.IntField(default=0)
     tasks_started = fields.IntField(default=0)
     tasks_completed = fields.IntField(default=0)
+    # fields materialised by collector.services for FES (mirror simulator schema)
+    duration_minutes = fields.FloatField()
+    date = fields.StringField()
+    login_minute_of_day = fields.IntField()
+    resource_visits = fields.ListField(fields.DictField())
+    quiz_items = fields.IntField(default=0)
+    quiz_items_correct = fields.IntField(default=0)
+    quiz_reattempts = fields.IntField(default=0)
+    assessment_score = fields.FloatField()
+    source = fields.StringField(default="collector")
 
     meta = {"collection": "sessions", "allow_inheritance": False}
 
@@ -33,4 +47,3 @@ class BehaviourEvent(Document):
     timestamp = fields.DateTimeField(required=True)
 
     meta = {"collection": "events", "allow_inheritance": False}
-
