@@ -16,6 +16,8 @@ class FESScore(Document):
     weights = fields.DictField()
     computed_at = fields.DateTimeField(required=True)
 
+    meta = {"collection": "fes_history", "allow_inheritance": False}
+
 
 class FESWeights(Document):
     """Per-student Eq. 2 weight vector; student=None denotes the
@@ -28,6 +30,7 @@ class FESWeights(Document):
     computed_at = fields.DateTimeField(required=True)
 
     meta = {
+        "collection": "fes_weights",
         "indexes": ["student"],
         "allow_inheritance": False,
     }

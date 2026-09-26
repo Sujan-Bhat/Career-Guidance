@@ -181,8 +181,8 @@ replay buffer, target-network sync every 100 steps, Eq. 3 reward weights) live i
 ## Roadmap (implementation phases)
 
 0. **Skeleton** — structure, stubs, docker-compose, seed data
-1. **Data foundation** (current state) — OULAD ingestion (verified mirror), 200-student synthetic simulator calibrated to OULAD, knowledge-graph loader, pathways API
-2. `ml/fes` — five sub-metrics + Eq. 2 per-student weight calibration
+1. **Data foundation** — OULAD ingestion (verified mirror), 200-student synthetic simulator calibrated to OULAD, knowledge-graph loader, pathways API
+2. **FES engine** (current state) — five sub-metrics, Eq. 2 per-student weight calibration (gates + population fallback), batch pipeline, FES read APIs
 3. Backend core — auth, behavioural collector, session→FES pipeline
 4. Recommender — KG filtering, FES-weighted CF, FM scoring, cascade API
 5. Career prediction ensemble + feature attribution

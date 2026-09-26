@@ -18,9 +18,10 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.module == "fes":
-        from careermind_ml.fes.weights import calibrate_student_weights  # noqa: F401
-        print("Phase 2: FES weight calibration not implemented yet")
-        return 1
+        from careermind_ml.fes.pipeline import run_pipeline
+
+        run_pipeline(config_path=args.config)
+        return 0
     if args.module == "fm":
         from careermind_ml.recommender.fm import train_fm  # noqa: F401
         print("Phase 4: FM training not implemented yet")

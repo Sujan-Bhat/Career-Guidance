@@ -25,13 +25,13 @@ lint:
 	python -m compileall -q backend ml llm_gateway data evaluation
 
 train-fes:
-	python -m careermind_ml.train --module fes --config ml/configs/fes.yaml
+	PYTHONPATH=ml python -m careermind_ml.train --module fes --config ml/configs/fes.yaml
 
 train-fm:
-	python -m careermind_ml.train --module fm --config ml/configs/fm.yaml
+	PYTHONPATH=ml python -m careermind_ml.train --module fm --config ml/configs/fm.yaml
 
 train-dqn:
-	python -m careermind_ml.train --module dqn --config ml/configs/dqn.yaml
+	PYTHONPATH=ml python -m careermind_ml.train --module dqn --config ml/configs/dqn.yaml
 
 train-ensemble:
-	python -m careermind_ml.train --module ensemble --config ml/configs/ensemble.yaml
+	PYTHONPATH=ml python -m careermind_ml.train --module ensemble --config ml/configs/ensemble.yaml
