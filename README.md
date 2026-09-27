@@ -144,8 +144,9 @@ pip install -e "llm_gateway[dev]"  # Part A — provider SDKs optional
   and guidance chat shells.
 - **Backend:** `GET /api/v1/careers/pathways` returns **real data** — 18 career
   pathways with skill prerequisites and typical courses (Phase 1); the FES,
-  recommendations, and career-prediction endpoints are live (Phases 2–5) and
-  require a JWT; anything still stubbed returns `501 {"detail": ...}`.
+  recommendations, career-prediction, and RL-feedback endpoints are live
+  (Phases 2–6) and require a JWT; anything still stubbed returns
+  `501 {"detail": ...}`.
 - **MongoDB** (after the data-foundation steps): 18 career pathways + 20 skills,
   400 profiles (200 real OULAD + 200 synthetic), ~13.5k behavioural sessions,
   ~136k events, and 6.3k learning resources.
@@ -184,8 +185,8 @@ replay buffer, target-network sync every 100 steps, Eq. 3 reward weights) live i
 2. **FES engine** — five sub-metrics, Eq. 2 per-student weight calibration (gates + population fallback), batch pipeline, FES read APIs
 3. **Backend core** — JWT auth (register/login/me/refresh), behavioural collector (session lifecycle + event ingestion), session-end FES via Celery, quiz attempts (FR04), frontend login + JWT'd tracking
 4. **Recommender** — 3-stage cascade live: KG filtering (≥60%), FES-weighted CF re-ranking, trained FM (held-out AUC 0.84) with accept/reject logging; population-profile cold start
-5. **Career prediction ensemble** (current state) — stacking RF+GBT+MLP → LR meta (held-out acc 0.93 incl. stated preferences; no-preference ablation 0.38), occlusion feature attribution, `GET /careers/predictions` + live `/prediction` page
-6. RL — simulator environment, DQN pre-training, online integration
+5. **Career prediction ensemble** — stacking RF+GBT+MLP → LR meta (held-out acc 0.93 incl. stated preferences; no-preference ablation 0.38), occlusion feature attribution, `GET /careers/predictions` + live `/prediction` page
+6. **RL adaptive feedback** (current state) — gymnasium simulator environment with the paper's 8 interventions, Eq. 3 reward (α·dFES + β·dSkill + γ·E + δ·CA), DQN pre-training (1000 episodes / 60k steps, reward +5.7 → +9.4), artifact serving, and `GET /rl/status` + `POST /rl/action` transition-logging API
 7. LLM gateway — chat, explanations (NFR07)
 8. Full frontend
 9. Evaluation / pilot study

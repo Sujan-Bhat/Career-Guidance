@@ -36,9 +36,28 @@ def main() -> int:
         train_fm(data, config)
         return 0
     if args.module == "dqn":
-        from careermind_ml.rl.train import train_dqn  # noqa: F401
-        print("Phase 6: DQN pre-training not implemented yet")
-        return 1
+        import pathlib
+        import sys
+
+        import yaml
+
+        from careermind_ml.rl.dqn import DQNAgent
+        from careermind_ml.rl.environment import CareerGuidanceEnv
+        from careermind_ml.rl.train import train_dqn
+
+        config = {}
+        if args.config:
+            with open(args.config) as fh:
+                config = yaml.safe_load(fh) or {}
+        # simulator lives outside the package (data/simulator)
+        sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "data" / "simulator"))
+        from simulator import StudentSimulator
+
+        simulator = StudentSimulator(seed=config.get("random_state"))
+        env = CareerGuidanceEnv(simulator, config)
+        agent = DQNAgent(config)
+        train_dqn(env, agent, config)
+        return 0
     if args.module == "ensemble":
         import yaml
 

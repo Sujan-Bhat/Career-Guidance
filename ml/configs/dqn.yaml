@@ -9,6 +9,9 @@ epsilon_decay_steps: 20000
 batch_size: 64
 learning_rate: 0.0005
 max_episodes: 1000
+steps_per_episode: 60
+random_state: 42
+log_every: 100
 reward_weights:
   alpha: 0.4   # dFES (weekly change in average FES)
   beta: 0.3    # dSkill (skill-assessment change in recommended domain)
