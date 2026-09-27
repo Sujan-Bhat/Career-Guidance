@@ -72,3 +72,91 @@ def test_accept_and_reject_decision_flow(registered):
 @pytest.mark.usefixtures("seeded_population")
 def test_recommendations_require_auth(api):
     assert api.get("/api/v1/recommendations/").status_code in (401, 403)
+
+
+# ---- Phase 7: LLM explanation endpoint (NFR07) ---------------------------
+
+@pytest.fixture
+def recommendation_for_user(registered):
+    from datetime import datetime
+
+    from apps.recommendations.models import Recommendation
+
+    _, user = registered
+    doc = Recommendation(
+        student=user["student_id"],
+        item_type="pathway",
+        item_id="c03",
+        stage1_eligible=True,
+        stage2_cf_score=0.41,
+        stage3_fm_score=0.83,
+        contributing_features={"fes_current": 0.72, "skill_databases_sql": 90},
+        decision="pending",
+        created_at=datetime.utcnow(),
+    ).save()
+    return str(doc.pk)
+
+
+def test_explain_requires_auth(api, recommendation_for_user):
+    response = api.get(f"/api/v1/recommendations/{recommendation_for_user}/explain")
+    assert response.status_code in (401, 403)
+
+
+def test_explain_404_unknown(registered, recommendation_for_user):
+    client, _ = registered
+    assert client.get("/api/v1/recommendations/000000000000000000000000/explain").status_code == 404
+
+
+def test_explain_503_without_key(recommendation_for_user, registered, monkeypatch):
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    client, _ = registered
+    response = client.get(f"/api/v1/recommendations/{recommendation_for_user}/explain")
+    assert response.status_code == 503
+    assert "LLM_API_KEY" in response.data["detail"]
+
+
+def test_explain_generates_and_caches(recommendation_for_user, registered, monkeypatch):
+    import careermind_llm.explain as explain_mod
+
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    calls = []
+
+    def _fake(recommendation, features, client=None):
+        calls.append((recommendation, features))
+        return "Your SQL skill and engagement match this pathway."
+
+    monkeypatch.setattr(explain_mod, "generate_explanation", _fake)
+
+    client, _ = registered
+    first = client.get(f"/api/v1/recommendations/{recommendation_for_user}/explain")
+    assert first.status_code == 200
+    assert first.data["explanation"] == "Your SQL skill and engagement match this pathway."
+    assert first.data["cached"] is False
+
+    recommendation, features = calls[0]
+    assert recommendation["stage3_fm_score"] == 0.83
+    assert {"feature": "fes_current", "value": 0.72} in features
+
+    # cached: no second LLM call even if the provider would now fail
+    def _should_not_be_called(*_args, **_kwargs):
+        raise AssertionError("second call must not hit the LLM")
+
+    monkeypatch.setattr(explain_mod, "generate_explanation", _should_not_be_called)
+    second = client.get(f"/api/v1/recommendations/{recommendation_for_user}/explain")
+    assert second.status_code == 200
+    assert second.data["cached"] is True
+    assert len(calls) == 1
+
+
+def test_explain_provider_failure_returns_502(recommendation_for_user, registered, monkeypatch):
+    import careermind_llm.explain as explain_mod
+
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+
+    def _boom(recommendation, features, client=None):
+        raise RuntimeError("provider down")
+
+    monkeypatch.setattr(explain_mod, "generate_explanation", _boom)
+    client, _ = registered
+    response = client.get(f"/api/v1/recommendations/{recommendation_for_user}/explain")
+    assert response.status_code == 502

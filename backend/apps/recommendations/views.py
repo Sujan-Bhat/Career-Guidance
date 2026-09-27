@@ -136,7 +136,46 @@ class RejectView(_DecisionView):
 
 
 class ExplainView(APIView):
-    """Phase 7: plain-language explanation via llm_gateway (NFR07)."""
+    """Plain-language explanation of WHY this item was recommended (NFR07).
+    Cached on the Recommendation document after the first LLM call."""
 
     def get(self, request, recommendation_id):
-        return Response({"detail": "Not implemented (Phase 7)"}, status=501)
+        import os
+
+        doc = Recommendation.objects(pk=recommendation_id).first()
+        if doc is None or doc.student != request.user.student_id:
+            return Response({"detail": "Recommendation not found"}, status=404)
+        if doc.explanation:
+            return Response({"explanation": doc.explanation, "cached": True})
+        if not os.getenv("LLM_API_KEY"):
+            return Response(
+                {"detail": "LLM API key not configured — set LLM_API_KEY"}, status=503
+            )
+
+        from careermind_llm.explain import generate_explanation
+
+        from apps.careers.models import CareerPathway
+
+        pathway = CareerPathway.objects(external_id=doc.item_id).only("external_id", "name", "category").first()
+        recommendation = {
+            "item_id": doc.item_id,
+            "name": pathway.name if pathway else doc.item_id,
+            "category": pathway.category if pathway else None,
+            "stage1_eligible": doc.stage1_eligible,
+            "stage2_cf_score": doc.stage2_cf_score,
+            "stage3_fm_score": doc.stage3_fm_score,
+        }
+        contributing = [
+            {"feature": feature, "value": value}
+            for feature, value in (doc.contributing_features or {}).items()
+        ]
+        try:
+            explanation = generate_explanation(recommendation, contributing)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=502)
+        except Exception:
+            return Response({"detail": "LLM provider request failed"}, status=502)
+
+        doc.explanation = explanation
+        doc.save()
+        return Response({"explanation": explanation, "cached": False})

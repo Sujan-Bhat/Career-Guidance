@@ -19,7 +19,7 @@ export default function PredictionPage() {
   const payload = data?.data;
   const distribution: Distribution[] = payload?.distribution ?? [];
   const topFeatures: FeatureImportance[] = payload?.top_features ?? [];
-  const status = error?.response?.status;
+  const status = (error as { response?: { status?: number } } | null)?.response?.status;
 
   return (
     <div className="flex flex-col gap-6">

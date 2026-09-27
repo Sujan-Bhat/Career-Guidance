@@ -24,8 +24,18 @@ class OpenAIClient(LLMClient):
         self.model = model
 
     def complete(self, messages, temperature=0.7, max_tokens=1024) -> str:
-        """Phase 7: lazy `import openai` + chat.completions.create(...)."""
-        raise NotImplementedError("Phase 7")
+        if not self.api_key:
+            raise RuntimeError("LLM_API_KEY is not configured")
+        from openai import OpenAI  # lazy: optional provider SDK
+
+        client = OpenAI(api_key=self.api_key)
+        response = client.chat.completions.create(
+            model=self.model or "gpt-4o-mini",
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        return (response.choices[0].message.content or "").strip()
 
 
 class AnthropicClient(LLMClient):
@@ -34,8 +44,24 @@ class AnthropicClient(LLMClient):
         self.model = model
 
     def complete(self, messages, temperature=0.7, max_tokens=1024) -> str:
-        """Phase 7: lazy `import anthropic` + messages.create(...)."""
-        raise NotImplementedError("Phase 7")
+        if not self.api_key:
+            raise RuntimeError("LLM_API_KEY is not configured")
+        from anthropic import Anthropic  # lazy: optional provider SDK
+
+        client = Anthropic(api_key=self.api_key)
+        system = "\n\n".join(m["content"] for m in messages if m["role"] == "system")
+        kwargs = {
+            "model": self.model or "claude-3-5-sonnet-latest",
+            "messages": [m for m in messages if m["role"] != "system"],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        if system:
+            kwargs["system"] = system
+        response = client.messages.create(**kwargs)
+        return "".join(
+            block.text for block in response.content if getattr(block, "type", None) == "text"
+        ).strip()
 
 
 class GeminiClient(LLMClient):
@@ -44,8 +70,27 @@ class GeminiClient(LLMClient):
         self.model = model
 
     def complete(self, messages, temperature=0.7, max_tokens=1024) -> str:
-        """Phase 7: lazy `import google.generativeai` + generate_content(...)."""
-        raise NotImplementedError("Phase 7")
+        if not self.api_key:
+            raise RuntimeError("LLM_API_KEY is not configured")
+        import google.generativeai as genai  # lazy: optional provider SDK
+
+        genai.configure(api_key=self.api_key)
+        system = "\n\n".join(m["content"] for m in messages if m["role"] == "system")
+        model = genai.GenerativeModel(
+            self.model or "gemini-1.5-flash",
+            system_instruction=system or None,
+        )
+        # flatten the chat history into one grounded prompt
+        parts = [
+            f"{'Student' if m['role'] == 'user' else 'Assistant'}: {m['content']}"
+            for m in messages
+            if m["role"] != "system"
+        ]
+        response = model.generate_content(
+            parts,
+            generation_config={"temperature": temperature, "max_output_tokens": max_tokens},
+        )
+        return (response.text or "").strip()
 
 
 _CLASSES = {

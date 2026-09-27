@@ -140,13 +140,14 @@ pip install -e "llm_gateway[dev]"  # Part A — provider SDKs optional
 ### What you should see
 
 - **Frontend:** landing page, login, dashboard with the FES score ring,
-  live career prediction distribution (Phase 5), plus recommendations, quiz,
-  and guidance chat shells.
+  live career prediction distribution (Phase 5), a live guidance chat
+  (Phase 7; friendly degradation without `LLM_API_KEY`), plus recommendation
+  and quiz shells.
 - **Backend:** `GET /api/v1/careers/pathways` returns **real data** — 18 career
   pathways with skill prerequisites and typical courses (Phase 1); the FES,
-  recommendations, career-prediction, and RL-feedback endpoints are live
-  (Phases 2–6) and require a JWT; anything still stubbed returns
-  `501 {"detail": ...}`.
+  recommendations, career-prediction, RL-feedback, and LLM-proxy endpoints are
+  live (Phases 2–7) and require a JWT; anything still stubbed returns
+  `501 {"detail": ...}`. LLM endpoints return 503 until `LLM_API_KEY` is set.
 - **MongoDB** (after the data-foundation steps): 18 career pathways + 20 skills,
   400 profiles (200 real OULAD + 200 synthetic), ~13.5k behavioural sessions,
   ~136k events, and 6.3k learning resources.
@@ -186,8 +187,8 @@ replay buffer, target-network sync every 100 steps, Eq. 3 reward weights) live i
 3. **Backend core** — JWT auth (register/login/me/refresh), behavioural collector (session lifecycle + event ingestion), session-end FES via Celery, quiz attempts (FR04), frontend login + JWT'd tracking
 4. **Recommender** — 3-stage cascade live: KG filtering (≥60%), FES-weighted CF re-ranking, trained FM (held-out AUC 0.84) with accept/reject logging; population-profile cold start
 5. **Career prediction ensemble** — stacking RF+GBT+MLP → LR meta (held-out acc 0.93 incl. stated preferences; no-preference ablation 0.38), occlusion feature attribution, `GET /careers/predictions` + live `/prediction` page
-6. **RL adaptive feedback** (current state) — gymnasium simulator environment with the paper's 8 interventions, Eq. 3 reward (α·dFES + β·dSkill + γ·E + δ·CA), DQN pre-training (1000 episodes / 60k steps, reward +5.7 → +9.4), artifact serving, and `GET /rl/status` + `POST /rl/action` transition-logging API
-7. LLM gateway — chat, explanations (NFR07)
+6. **RL adaptive feedback** — gymnasium simulator environment with the paper's 8 interventions, Eq. 3 reward (α·dFES + β·dSkill + γ·E + δ·CA), DQN pre-training (1000 episodes / 60k steps, reward +5.7 → +9.4), artifact serving, and `GET /rl/status` + `POST /rl/action` transition-logging API
+7. **LLM gateway (Part A)** (current state) — OpenAI/Anthropic/Gemini adapters, agency-preserving grounded guidance chat (`POST /llm/chat`, per-student history window), LLM quiz generation (`POST /llm/quiz/generate`), cached recommendation explanations (`GET /recommendations/<id>/explain`), live `/chat` page; 503 without `LLM_API_KEY`, 502 on provider failure
 8. Full frontend
 9. Evaluation / pilot study
 10. Deployment polish

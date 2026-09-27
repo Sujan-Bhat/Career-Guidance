@@ -7,6 +7,25 @@ import mongoengine
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
+
+def _load_env_file() -> None:
+    """Load the repo-root .env (if present) so `cp .env.example .env`
+    configures local dev. Existing environment variables always win."""
+    env_path = BASE_DIR.parent / ".env"
+    if not env_path.is_file():
+        return
+    for line in env_path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key, value = key.strip(), value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+_load_env_file()
+
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "insecure-dev-key-change-me")
 DEBUG = False
 ALLOWED_HOSTS = ["*"]
