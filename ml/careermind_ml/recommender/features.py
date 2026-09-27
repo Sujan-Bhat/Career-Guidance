@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from ..fes.trend import compute_fes_trend
+
 GRADE_SUBJECTS = ("CS201", "CS230", "CS320", "ST210", "CS350")
 CAREER_CATEGORIES = ("software", "data", "infrastructure", "security", "hardware", "management")
 DEFAULT_YEAR_OF_STUDY = 3
@@ -154,11 +156,7 @@ def load_fm_training_data(uri: str = "mongodb://localhost:27017", db_name: str =
         }
         series = fes_by_student.get(student, [])
         fes_current = series[-1][1] if series else None
-        fes_trend = None
-        if len(series) >= 2:
-            recent = [f for _, f in series[-7:]]
-            previous = [f for _, f in series[-14:-7]] or [f for _, f in series[:-7]]
-            fes_trend = float(np.clip(0.5 + (np.mean(recent) - np.mean(previous)) / 2.0, 0.0, 1.0))
+        fes_trend = compute_fes_trend(series)
         preferences = profile.get("latents", {}).get("domain_affinity") or {
             p.get("category"): p.get("weight") for p in profile.get("career_preferences") or []
         }

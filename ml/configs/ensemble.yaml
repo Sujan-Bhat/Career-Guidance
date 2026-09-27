@@ -1,9 +1,14 @@
 base_learners: [random_forest, gradient_boosting, mlp]
 meta_learner: logistic_regression
 cv_folds: 5
+include_preferences: true   # paper-exact features; ablation is always printed
+test_size: 0.2
+random_state: 42
 random_forest:
   n_estimators: 300
 gradient_boosting:
   n_estimators: 200
 mlp:
   hidden_layer_sizes: [64, 32]
+  max_iter: 500
+  early_stopping: true

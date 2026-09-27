@@ -25,17 +25,12 @@ def _get_cascade():
 
 def _student_context(profile) -> tuple[dict, dict | None]:
     """(feature agg, skill levels) for the requesting student (JWT profile)."""
-    import numpy as np
-
     from apps.fes.models import FESScore
+    from careermind_ml.fes.trend import compute_fes_trend
 
     series = [(s.computed_at, s.fes) for s in FESScore.objects(student=profile.student_id).order_by("computed_at")]
     fes_current = series[-1][1] if series else None
-    fes_trend = None
-    if len(series) >= 2:
-        recent = [f for _, f in series[-7:]]
-        previous = [f for _, f in series[-14:-7]] or [f for _, f in series[:-7]]
-        fes_trend = float(np.clip(0.5 + (np.mean(recent) - np.mean(previous)) / 2.0, 0.0, 1.0))
+    fes_trend = compute_fes_trend(series)
 
     grades = {r.subject: r.grade for r in profile.academic_records}
     preferences = {p.category: p.weight for p in profile.career_preferences}

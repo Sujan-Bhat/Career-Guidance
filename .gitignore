@@ -21,6 +21,7 @@ frontend/.env.local
 data/oulad/raw/
 ml/artifacts/*.pt
 ml/artifacts/*.json
+ml/artifacts/*.joblib
 *.ckpt
 
 # OS / editor

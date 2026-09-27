@@ -40,9 +40,18 @@ def main() -> int:
         print("Phase 6: DQN pre-training not implemented yet")
         return 1
     if args.module == "ensemble":
-        from careermind_ml.career_prediction.ensemble import train_ensemble  # noqa: F401
-        print("Phase 5: ensemble training not implemented yet")
-        return 1
+        import yaml
+
+        from careermind_ml.career_prediction.ensemble import train_ensemble
+        from careermind_ml.career_prediction.features import load_ensemble_training_data
+
+        config = {}
+        if args.config:
+            with open(args.config) as fh:
+                config = yaml.safe_load(fh) or {}
+        data = load_ensemble_training_data()
+        train_ensemble(data, config)
+        return 0
     return 0
 
 

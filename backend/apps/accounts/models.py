@@ -36,6 +36,12 @@ class StudentProfile(Document):
     career_preferences = fields.ListField(fields.EmbeddedDocumentField(CareerPreference))
     source = fields.StringField(default="careermind")  # careermind | simulator | oulad
     created_at = fields.DateTimeField()
+    # fields written by the seeders via raw pymongo (declared so seeded
+    # profiles load through this model without FieldDoesNotExist)
+    external_id = fields.StringField()
+    latents = fields.DictField()
+    career_outcome = fields.DictField()  # ground-truth label for the ensemble
+    final_results = fields.ListField(fields.DictField())  # OULAD module results
 
     meta = {"collection": "profiles", "allow_inheritance": False}
 

@@ -26,7 +26,13 @@ class CareerPrediction(Document):
     plus top contributing profile features (transparency, paper Sec. V-D)."""
 
     student = fields.StringField(required=True)
-    distribution = fields.ListField(fields.DictField())  # [{"pathway": ..., "probability": ...}]
+    distribution = fields.ListField(fields.DictField())  # [{"category": ..., "probability": ...}]
     top_features = fields.ListField(fields.DictField())  # [{"feature": ..., "importance": ...}]
     model_version = fields.StringField()
     predicted_at = fields.DateTimeField(required=True)
+
+    meta = {
+        "collection": "career_prediction",
+        "indexes": ["student"],
+        "allow_inheritance": False,
+    }
