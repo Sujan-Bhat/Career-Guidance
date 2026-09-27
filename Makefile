@@ -21,15 +21,19 @@ dev:
 seed:
 	python data/seeds/seed_mongo.py --uri $${MONGO_URI:-mongodb://localhost:27017} --db $${MONGO_DB_NAME:-careermind}
 
-# one invocation per suite: ml/tests and llm_gateway/tests both define a
-# `tests` package, so they cannot share a single pytest process
+# one invocation per suite: ml/tests, llm_gateway/tests and evaluation/tests
+# each define a `tests` package, so they cannot share a single pytest process
 test:
 	PYTHONPATH=ml $(PYTHON) -m pytest ml/tests -q
 	$(PYTHON) -m pytest llm_gateway/tests -q
+	PYTHONPATH=ml:evaluation $(PYTHON) -m pytest evaluation/tests -q
 	PYTHONPATH=ml:backend $(PYTHON) -m pytest backend/apps
 
 lint:
 	$(PYTHON) -m compileall -q backend ml llm_gateway data evaluation
+
+eval:
+	PYTHONPATH=ml:evaluation $(PYTHON) evaluation/run_pilot.py
 
 train-fes:
 	PYTHONPATH=ml $(PYTHON) -m careermind_ml.train --module fes --config ml/configs/fes.yaml

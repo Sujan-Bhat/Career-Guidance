@@ -55,7 +55,7 @@ careermind/
 ├── ml/            # Part B: careermind_ml training package + configs + tests
 ├── llm_gateway/   # Part A: careermind_llm package (provider adapters)
 ├── data/          # OULAD downloader + schema mapper, student simulator, careers seed, Mongo seeder
-├── evaluation/    # metrics, baselines, sensitivity analysis, pilot notebook
+├── evaluation/    # metrics, baselines, pilot study runner, sensitivity analysis
 ├── infra/         # docker-compose.yml
 ├── docs/          # architecture.md (Fig. 1)
 ├── Makefile       # common commands
@@ -150,14 +150,19 @@ pip install -e "llm_gateway[dev]"  # Part A — provider SDKs optional
   `LLM_API_KEY` is set (see `.env.example`; the backend loads the repo-root
   `.env` automatically).
 - **MongoDB** (after the data-foundation steps): 18 career pathways + 20 skills,
-  400 profiles (200 real OULAD + 200 synthetic), ~13.5k behavioural sessions,
-  ~136k events, and 6.3k learning resources.
+  200 synthetic student profiles (+ registered users), 2,400 behavioural
+  sessions, ~36.6k events, 4.3k learning interactions, 4 demo quizzes
+  (20 items), and the FES history/weight collections.
+- **Evaluation:** `make eval` runs the four pilot studies and writes
+  `evaluation/results/pilot_results.json` (FES validity, recommender
+  benchmark, DQN convergence, sensitivity sweeps).
 
 ## Testing
 
 ```bash
-# full suite: ML package + LLM gateway + backend (venv-aware, per-suite
-# invocations — ml/tests and llm_gateway/tests both own the `tests` package)
+# full suite: ML package + LLM gateway + evaluation + backend (venv-aware,
+# per-suite invocations — ml/tests, llm_gateway/tests and evaluation/tests
+# all own the `tests` package)
 make test
 
 # single suites, e.g.:
@@ -166,6 +171,32 @@ PYTHONPATH=ml python -m pytest ml/tests
 # ML suite includes Phase 1 simulator validation: TCR↔ability, QAP↔motivation
 # and outcome↔ability correlations, determinism, KG eligibility math
 ```
+
+## Pilot study (evaluation)
+
+```bash
+make eval      # PYTHONPATH=ml:evaluation python evaluation/run_pilot.py
+```
+
+Four studies (paper Sec. VIII), results also written to
+`evaluation/results/pilot_results.json`:
+
+1. **FES predictive validity** — Pearson r of FES/sub-metrics vs mean grade
+   (TCR strongest ≈ 0.64; per-student Eq. 2 weights vs the 3-student
+   population fallback, whose n=3 group correlations are illustrative only).
+2. **Recommender benchmark** — leave-one-out over interactions: the 3-stage
+   cascade reaches Hit@10 ≈ 0.84 alongside single-technique baselines
+   (fm_only ≈ 0.86, cf_only ≈ 0.79, popularity ≈ 0.72, kg_only ≈ 0.55); the
+   stage-1 gate passes on average 16.2 of 18 pathways at the paper's 0.6
+   threshold.
+3. **DQN convergence** — training curve read from
+   `ml/artifacts/dqn_training.json` (reward climbs ≈ +6.4 → +8.5 over
+   1000 episodes).
+4. **Sensitivity** — sweeps over the stage-1 gate (hit@k 0.86 → 0.51 across
+   0.4 → 0.8), EngagementSignal thresholds (the interaction-rate threshold is
+   the binding constraint: positive rate 67% → 2% as it rises 1.5 → 4.0
+   actions/min), the ≥8-session calibration gate, and Eq. 3 reward weights
+   (γ-heavy weighting dominates in the reward metric).
 
 ## Training CLI (Part B)
 
@@ -188,10 +219,10 @@ replay buffer, target-network sync every 100 steps, Eq. 3 reward weights) live i
 3. **Backend core** — JWT auth (register/login/me/refresh), behavioural collector (session lifecycle + event ingestion), session-end FES via Celery, quiz attempts (FR04), frontend login + JWT'd tracking
 4. **Recommender** — 3-stage cascade live: KG filtering (≥60%), FES-weighted CF re-ranking, trained FM (held-out AUC 0.84) with accept/reject logging; population-profile cold start
 5. **Career prediction ensemble** — stacking RF+GBT+MLP → LR meta (held-out acc 0.93 incl. stated preferences; no-preference ablation 0.38), occlusion feature attribution, `GET /careers/predictions` + live `/prediction` page
-6. **RL adaptive feedback** — gymnasium simulator environment with the paper's 8 interventions, Eq. 3 reward (α·dFES + β·dSkill + γ·E + δ·CA), DQN pre-training (1000 episodes / 60k steps, reward +5.7 → +9.4), artifact serving, and `GET /rl/status` + `POST /rl/action` transition-logging API
+6. **RL adaptive feedback** — gymnasium simulator environment with the paper's 8 interventions, Eq. 3 reward (α·dFES + β·dSkill + γ·E + δ·CA), DQN pre-training (1000 episodes / 60k steps, reward +6.4 → +8.5), artifact serving, and `GET /rl/status` + `POST /rl/action` transition-logging API
 7. **LLM gateway (Part A)** — OpenAI/Anthropic/Gemini adapters, agency-preserving grounded guidance chat (`POST /llm/chat`, per-student history window), LLM quiz generation (`POST /llm/quiz/generate`), cached recommendation explanations (`GET /recommendations/<id>/explain`), live `/chat` page; 503 without `LLM_API_KEY`, 502 on provider failure
-8. **Full frontend** (current state) — live recommendations page (cascade provenance, accept/reject, "Why this?" explanations), quiz page (seeded demos + AI generation, per-item attempt recording into QAP), dashboard 14-day FES trend chart, live `/chat` and `/prediction` pages
-9. Evaluation / pilot study
-10. Deployment polish
+8. **Full frontend** — live recommendations page (cascade provenance, accept/reject, "Why this?" explanations), quiz page (seeded demos + AI generation, per-item attempt recording into QAP), dashboard 14-day FES trend chart, live `/chat` and `/prediction` pages
+9. **Evaluation / pilot study** — `evaluation/` package: leave-one-out benchmark (cascade vs kg/cf/fm/popularity, P@k/R@k/nDCG@k/Hit@k + gate pass-rate diagnostic), FES predictive-validity study, DQN convergence readout, and five sensitivity sweeps (Sec. VIII #4); `make eval` runs all four studies into `evaluation/results/pilot_results.json`; simulator fixes surfaced along the way (EngagementSignal action-density reachable, full skill profiles so the eligibility gate measures skill coverage rather than assessment coverage, idempotent event seeding)
+10. Deployment polish (remaining)
 
 See `docs/architecture.md` for the component/data-flow diagram (Fig. 1).

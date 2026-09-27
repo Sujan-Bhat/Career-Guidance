@@ -48,6 +48,7 @@ class StudentSimulator:
 
     def __init__(self, config: dict | None = None, seed: int | None = None):
         self.config = {**DEFAULT_CONFIG, **(config or {})}
+        self.seed = int(seed) if seed is not None else 0
         self.rng = np.random.default_rng(seed)
         self._career_by_category, self._careers = self._load_careers()
 
@@ -177,9 +178,12 @@ class StudentSimulator:
             quiz_incorrect = quiz_items - quiz_correct
             quiz_reattempts = int(self.rng.binomial(quiz_incorrect, 0.25 + 0.6 * motivation))
 
-            interactions = int(
-                self.rng.poisson((duration * (1.5 + 3.0 * focus)) * interaction_scale)
-            )
+            # OULAD calibrates click MAGNITUDE (daily VLE clicks); the paper's
+            # EngagementSignal needs live-platform action DENSITY (>= 3/min),
+            # so focus contributes an extra per-minute interaction layer that
+            # the daily totals do not capture.
+            interaction_rate = (1.5 + 3.0 * focus) * interaction_scale + 2.0 * focus
+            interactions = int(self.rng.poisson(duration * interaction_rate))
 
             assessment_score = float(
                 np.clip(
@@ -234,14 +238,17 @@ class StudentSimulator:
 
         # skills: correlated with ability and the student's domain affinity
         skill_scores = {}
+        skills_by_category = {}
+        skill_categories: dict = {}
         try:
             with open(SEED_PATH) as fh:
-                skills_by_category = {}
                 for career in json.load(fh)["careers"]:
                     for prereq in career["prerequisites"]:
                         skills_by_category.setdefault(career["category"], set()).add(prereq["skill"])
+                        skill_categories.setdefault(prereq["skill"], []).append(career["category"])
         except OSError:
             skills_by_category = {}
+            skill_categories = {}
         affinity = np.array([student["domain_affinity"][c] for c in CAREER_CATEGORIES])
         affinity = affinity / affinity.sum()
         chosen_categories = self.rng.choice(len(CAREER_CATEGORIES), size=5, p=affinity)
@@ -256,6 +263,21 @@ class StudentSimulator:
             related = student["domain_affinity"].get(cat, 0.2)
             skill_scores[skill] = float(
                 np.clip(self.rng.normal(25 + 60 * (0.65 * ability + 0.35 * related), 10), 0, 100)
+            )
+
+        # Assess every remaining KG skill too: a sparse profile would make the
+        # prerequisite gate conflate "never assessed" with "below minimum".
+        # Drawn from a per-student side stream so the main RNG sequence
+        # (sessions, interactions, grades, career label) stays unchanged.
+        seq = str(student.get("student_id") or "").rsplit("_", 1)[-1]
+        fill_rng = np.random.default_rng([self.seed, int(seq) if seq.isdigit() else 0])
+        for skill in sorted(skill_categories):
+            if skill in skill_scores:
+                continue
+            cats = skill_categories[skill]
+            related = float(np.mean([student["domain_affinity"].get(c, 0.2) for c in cats]))
+            skill_scores[skill] = float(
+                np.clip(fill_rng.normal(25 + 60 * (0.65 * ability + 0.35 * related), 10), 0, 100)
             )
 
         # career label: highest-affinity category; pick a concrete pathway in it

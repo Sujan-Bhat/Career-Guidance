@@ -1,0 +1,205 @@
+{
+  "studies": {
+    "fes-validity": {
+      "n_students": 201,
+      "n_per_student_weights": 198,
+      "n_population_weights": 3,
+      "all": {
+        "fes": 0.19990312015958514,
+        "tcr": 0.6443317650839864,
+        "sci": 0.10046994826341847,
+        "dfet": -0.0458740713142862,
+        "qap": 0.06528724228470477,
+        "lrds": 0.05713564126330939
+      },
+      "per_student_weights": {
+        "fes": 0.18043650226085312,
+        "tcr": 0.6395570793643711,
+        "sci": 0.1113331372685941,
+        "dfet": -0.03232029246215884,
+        "qap": 0.0563177033162171,
+        "lrds": 0.06918377203994691
+      },
+      "population_weights": {
+        "fes": 0.9625897823597563,
+        "tcr": 0.9398146429020247,
+        "sci": 0.6713188779714365,
+        "dfet": -0.982311510912057,
+        "qap": 0.7400218077779391,
+        "lrds": 0.5210178729414526
+      }
+    },
+    "benchmark": {
+      "n_students": 200,
+      "top_k": 10,
+      "threshold": null,
+      "mean_candidates": 16.18,
+      "metrics": {
+        "cascade": {
+          "precision@k": 0.084,
+          "recall@k": 0.84,
+          "ndcg@k": 0.5015000111105458,
+          "hit@k": 0.84
+        },
+        "kg_only": {
+          "precision@k": 0.055,
+          "recall@k": 0.55,
+          "ndcg@k": 0.24260734973273584,
+          "hit@k": 0.55
+        },
+        "cf_only": {
+          "precision@k": 0.079,
+          "recall@k": 0.79,
+          "ndcg@k": 0.45970749673233213,
+          "hit@k": 0.79
+        },
+        "fm_only": {
+          "precision@k": 0.086,
+          "recall@k": 0.86,
+          "ndcg@k": 0.5111221822512113,
+          "hit@k": 0.86
+        },
+        "popularity": {
+          "precision@k": 0.07200000000000001,
+          "recall@k": 0.72,
+          "ndcg@k": 0.40311348934203173,
+          "hit@k": 0.72
+        }
+      }
+    },
+    "dqn": {
+      "available": true,
+      "episodes": 1000,
+      "mean_reward_first": 6.8547,
+      "mean_reward_last": 8.5225,
+      "improvement": 1.6679,
+      "final_epsilon": 0.05,
+      "total_steps": 60000,
+      "reward_weights": {
+        "alpha": 0.4,
+        "beta": 0.3,
+        "gamma": 0.1,
+        "delta": 0.2
+      }
+    },
+    "sensitivity": {
+      "stage1_eligibility_threshold": {
+        "0.4": {
+          "precision@k": 0.0855,
+          "recall@k": 0.855,
+          "ndcg@k": 0.5090604197595998,
+          "hit@k": 0.855
+        },
+        "0.5": {
+          "precision@k": 0.0855,
+          "recall@k": 0.855,
+          "ndcg@k": 0.5090604197595998,
+          "hit@k": 0.855
+        },
+        "0.6": {
+          "precision@k": 0.084,
+          "recall@k": 0.84,
+          "ndcg@k": 0.5015000111105458,
+          "hit@k": 0.84
+        },
+        "0.7": {
+          "precision@k": 0.07600000000000001,
+          "recall@k": 0.76,
+          "ndcg@k": 0.4710703163440016,
+          "hit@k": 0.76
+        },
+        "0.8": {
+          "precision@k": 0.051000000000000004,
+          "recall@k": 0.51,
+          "ndcg@k": 0.3207257211869241,
+          "hit@k": 0.51
+        }
+      },
+      "min_session_minutes": {
+        "10": {
+          "flip_rate": 0.0,
+          "positive_rate": 0.1961682632236568,
+          "n_sessions": 2401
+        },
+        "15": {
+          "flip_rate": 0.0,
+          "positive_rate": 0.1961682632236568,
+          "n_sessions": 2401
+        },
+        "20": {
+          "flip_rate": 0.0020824656393169513,
+          "positive_rate": 0.19408579758433986,
+          "n_sessions": 2401
+        },
+        "25": {
+          "flip_rate": 0.0058309037900874635,
+          "positive_rate": 0.19033735943356936,
+          "n_sessions": 2401
+        }
+      },
+      "min_interactions_per_min": {
+        "1.5": {
+          "flip_rate": 0.4731361932528113,
+          "positive_rate": 0.6693044564764682,
+          "n_sessions": 2401
+        },
+        "2.0": {
+          "flip_rate": 0.36609745939192,
+          "positive_rate": 0.5622657226155768,
+          "n_sessions": 2401
+        },
+        "2.5": {
+          "flip_rate": 0.19200333194502292,
+          "positive_rate": 0.3881715951686797,
+          "n_sessions": 2401
+        },
+        "3.0": {
+          "flip_rate": 0.0,
+          "positive_rate": 0.1961682632236568,
+          "n_sessions": 2401
+        },
+        "4.0": {
+          "flip_rate": 0.17409412744689712,
+          "positive_rate": 0.022074135776759683,
+          "n_sessions": 2401
+        }
+      },
+      "min_sessions": {
+        "4": {
+          "per_student_share": 0.9800995024875622,
+          "mean_abs_fes_delta": 0.11151973662911559,
+          "n_students": 201
+        },
+        "6": {
+          "per_student_share": 0.9800995024875622,
+          "mean_abs_fes_delta": 0.11151973662911559,
+          "n_students": 201
+        },
+        "8": {
+          "per_student_share": 0.9800995024875622,
+          "mean_abs_fes_delta": 0.11151973662911559,
+          "n_students": 201
+        },
+        "12": {
+          "per_student_share": 0.9800995024875622,
+          "mean_abs_fes_delta": 0.11151973662911559,
+          "n_students": 201
+        }
+      },
+      "reward_weights": {
+        "{\"alpha\": 0.4, \"beta\": 0.3, \"delta\": 0.2, \"gamma\": 0.1}": {
+          "mean_reward_last50": 4.7736
+        },
+        "{\"alpha\": 0.7, \"beta\": 0.1, \"delta\": 0.1, \"gamma\": 0.1}": {
+          "mean_reward_last50": 3.8216
+        },
+        "{\"alpha\": 0.2, \"beta\": 0.2, \"delta\": 0.2, \"gamma\": 0.4}": {
+          "mean_reward_last50": 14.2092
+        },
+        "{\"alpha\": 0.2, \"beta\": 0.1, \"delta\": 0.6, \"gamma\": 0.1}": {
+          "mean_reward_last50": 7.944
+        }
+      }
+    }
+  }
+}

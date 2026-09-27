@@ -94,7 +94,7 @@ def seed_students(db, n_students: int, sessions_per_student: int, rng_seed: int)
         )
         for session in sessions:
             session_docs.append({**session, "status": "completed", "source": "simulator"})
-            event_docs.extend(sim.explode_events(session))
+            event_docs.extend({**e, "source": "simulator"} for e in sim.explode_events(session))
         interaction_docs.extend(
             {**i, "source": "simulator"} for i in sim.generate_interactions(student, sessions)
         )
