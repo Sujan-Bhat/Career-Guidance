@@ -17,6 +17,7 @@ import pathlib
 import sys
 
 SEED_PATH = pathlib.Path(__file__).resolve().parent.parent / "knowledge_graph" / "careers_seed.json"
+QUIZ_SEED_PATH = pathlib.Path(__file__).resolve().parent / "quiz_seed.json"
 SIMULATOR_DIR = pathlib.Path(__file__).resolve().parent.parent / "simulator"
 OULAD_RAW_DIR = pathlib.Path(__file__).resolve().parent.parent / "oulad" / "raw"
 
@@ -114,6 +115,18 @@ def seed_students(db, n_students: int, sessions_per_student: int, rng_seed: int)
     )
 
 
+def seed_quizzes(db) -> None:
+    """Demo self-assessment quizzes (idempotent, replaces seeded docs by
+    title). Gives the quiz page content without an LLM key (the LLM path
+    adds more)."""
+    quizzes = json.loads(QUIZ_SEED_PATH.read_text())
+    titles = [quiz["title"] for quiz in quizzes]
+    if titles:
+        db.quiz.delete_many({"title": {"$in": titles}})
+        db.quiz.insert_many(quizzes)
+    print(f"  demo quizzes: {len(quizzes)} ({sum(len(q['questions']) for q in quizzes)} items)")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Seed CAREERMIND MongoDB")
     parser.add_argument("--uri", default="mongodb://localhost:27017")
@@ -138,6 +151,7 @@ def main() -> int:
 
     print(f"Seeding database '{args.db}':")
     seed_knowledge_graph(db, seed)
+    seed_quizzes(db)
     if not args.skip_students:
         seed_students(db, args.students, args.sessions_per_student, args.seed)
     print("Done.")

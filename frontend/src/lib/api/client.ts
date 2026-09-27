@@ -88,10 +88,15 @@ export const endpoints = {
     events: (batch: unknown[]) => api.post("/api/v1/collector/events/batch", { events: batch }),
   },
   courses: {
+    list: () => api.get("/api/v1/courses/"),
+    quizzes: () => api.get("/api/v1/courses/quizzes"),
+    quiz: (id: string) => api.get(`/api/v1/courses/quizzes/${id}`),
     quizAttempt: (quizId: string, payload: { item_id: string; correct: boolean }) =>
       api.post(`/api/v1/courses/quizzes/${quizId}/attempt`, payload),
   },
   llm: {
     chat: (message: string) => api.post("/api/v1/llm/chat", { message }),
+    quizGenerate: (payload: { skill: string; difficulty: number; n_items: number }) =>
+      api.post("/api/v1/llm/quiz/generate", payload),
   },
 };

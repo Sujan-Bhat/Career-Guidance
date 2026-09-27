@@ -113,4 +113,20 @@ class QuizGenerateView(APIView):
             return Response({"detail": str(exc)}, status=502)
         except Exception:
             return Response({"detail": "LLM provider request failed"}, status=502)
-        return Response({"items": items, "skill": skill, "difficulty": difficulty})
+
+        # persist so attempts can be recorded against a real quiz id (FR04/QAP)
+        from apps.courses.models import Quiz
+
+        quiz = Quiz(
+            skill=skill,
+            title=f"AI quiz: {skill} (d{difficulty})",
+            questions=items,
+        ).save()
+        return Response(
+            {
+                "quiz_id": str(quiz.pk),
+                "items": items,
+                "skill": skill,
+                "difficulty": difficulty,
+            }
+        )

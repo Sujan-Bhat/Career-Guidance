@@ -107,6 +107,15 @@ def test_quiz_returns_items_with_clamped_difficulty(registered, monkeypatch):
     assert len(response.data["items"]) == 1
     assert response.data["skill"] == "python"
 
+    # persisted so quiz attempts can reference a real quiz id (FR04/QAP)
+    from apps.courses.models import Quiz
+
+    assert response.data["quiz_id"]
+    quiz = Quiz.objects(pk=response.data["quiz_id"]).first()
+    assert quiz is not None
+    assert quiz.skill == "python"
+    assert quiz.questions == response.data["items"]
+
 
 def test_quiz_model_failure_returns_502(registered, monkeypatch):
     monkeypatch.setenv("LLM_API_KEY", "test-key")

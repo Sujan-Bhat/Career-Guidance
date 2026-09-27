@@ -1,0 +1,161 @@
+[
+  {
+    "title": "Data Structures & Algorithms check",
+    "skill": "dsa",
+    "questions": [
+      {
+        "question": "Which structure provides O(1) average lookup by key?",
+        "options": ["Array", "Hash map", "Linked list", "Stack"],
+        "answer": 1,
+        "difficulty": 1
+      },
+      {
+        "question": "What is the worst-case time complexity of binary search on a sorted array of n elements?",
+        "options": ["O(1)", "O(log n)", "O(n)", "O(n log n)"],
+        "answer": 1,
+        "difficulty": 1
+      },
+      {
+        "question": "Which traversal of a binary search tree yields keys in ascending order?",
+        "options": ["Pre-order", "In-order", "Post-order", "Level-order"],
+        "answer": 1,
+        "difficulty": 2
+      },
+      {
+        "question": "Extracting the smallest element from a min-heap takes:",
+        "options": ["O(1)", "O(log n)", "O(n)", "O(n log n)"],
+        "answer": 1,
+        "difficulty": 2
+      },
+      {
+        "question": "Which of these is NOT a self-balancing binary search tree?",
+        "options": ["AVL tree", "Red-black tree", "Treap", "Trie"],
+        "answer": 3,
+        "difficulty": 3
+      }
+    ]
+  },
+  {
+    "title": "Python programming check",
+    "skill": "programming_python",
+    "questions": [
+      {
+        "question": "Which keyword defines a named function in Python?",
+        "options": ["func", "def", "fun", "function"],
+        "answer": 1,
+        "difficulty": 1
+      },
+      {
+        "question": "What does [x for x in range(3)] evaluate to?",
+        "options": ["[0, 1, 2]", "[1, 2, 3]", "range(3)", "[0, 1, 2, 3]"],
+        "answer": 0,
+        "difficulty": 1
+      },
+      {
+        "question": "What is the amortized time complexity of appending to a list?",
+        "options": ["O(1)", "O(log n)", "O(n)", "O(n^2)"],
+        "answer": 0,
+        "difficulty": 2
+      },
+      {
+        "question": "Which of these built-in types is immutable?",
+        "options": ["list", "dict", "tuple", "set"],
+        "answer": 2,
+        "difficulty": 2
+      },
+      {
+        "question": "The CPython Global Interpreter Lock primarily limits:",
+        "options": [
+          "How much memory a process may allocate",
+          "Parallel bytecode execution across Python threads",
+          "How often garbage collection runs",
+          "How modules are imported"
+        ],
+        "answer": 1,
+        "difficulty": 3
+      }
+    ]
+  },
+  {
+    "title": "Databases & SQL check",
+    "skill": "databases_sql",
+    "questions": [
+      {
+        "question": "Which SQL clause filters rows before grouping?",
+        "options": ["ORDER BY", "WHERE", "GROUP BY", "HAVING"],
+        "answer": 1,
+        "difficulty": 1
+      },
+      {
+        "question": "Which of these is one of the ACID properties?",
+        "options": ["Availability", "Isolation", "Scalability", "Replication"],
+        "answer": 1,
+        "difficulty": 1
+      },
+      {
+        "question": "A primary key constraint means the column is:",
+        "options": ["Nullable and unique", "Unique and not null", "Always auto-incremented", "Always numeric"],
+        "answer": 1,
+        "difficulty": 2
+      },
+      {
+        "question": "Which join returns every row from the left table even without a match?",
+        "options": ["INNER JOIN", "LEFT JOIN", "CROSS JOIN", "SELF JOIN"],
+        "answer": 1,
+        "difficulty": 2
+      },
+      {
+        "question": "Database normalization mainly reduces:",
+        "options": [
+          "Query execution time",
+          "Redundant data and update anomalies",
+          "The number of indexes needed",
+          "The need for keys"
+        ],
+        "answer": 1,
+        "difficulty": 3
+      }
+    ]
+  },
+  {
+    "title": "Digital electronics check",
+    "skill": "electronics_digital",
+    "questions": [
+      {
+        "question": "What is the output of a 2-input AND gate with inputs 1 and 0?",
+        "options": ["0", "1", "High-impedance", "Undefined"],
+        "answer": 0,
+        "difficulty": 1
+      },
+      {
+        "question": "A single flip-flop stores:",
+        "options": ["1 bit", "1 byte", "An analog level", "A full clock cycle"],
+        "answer": 0,
+        "difficulty": 1
+      },
+      {
+        "question": "Which of these is a combinational logic circuit?",
+        "options": ["Multiplexer with enable", "Ripple counter", "Shift register", "Flip-flop"],
+        "answer": 0,
+        "difficulty": 2
+      },
+      {
+        "question": "The output of a Moore machine depends on:",
+        "options": ["Inputs only", "The current state only", "The clock edge only", "The reset signal only"],
+        "answer": 1,
+        "difficulty": 2
+      },
+      {
+        "question": "Propagation delay is conventionally measured between:",
+        "options": [
+          "The 50% points of the input and output transitions",
+          "VCC and GND rails",
+          "Power-on and reset release",
+          "Two consecutive clock edges"
+        ],
+        "answer": 0,
+        "difficulty": 3
+      }
+    ]
+  }
+]
