@@ -51,8 +51,9 @@ def seed_students(db, n_students: int, sessions_per_student: int, rng_seed: int)
     db.profiles.delete_many({"source": "simulator"})
     db.sessions.delete_many({"source": "simulator"})
     db.events.delete_many({"source": "simulator"})
+    db.interactions.delete_many({"source": "simulator"})
 
-    profile_docs, session_docs, event_docs = [], [], []
+    profile_docs, session_docs, event_docs, interaction_docs = [], [], [], []
     for student in sim.generate_students(n_students):
         sessions = sim.generate_sessions(student, sessions_per_student)
         outcome = sim.generate_outcomes(student, sessions)
@@ -93,17 +94,23 @@ def seed_students(db, n_students: int, sessions_per_student: int, rng_seed: int)
         for session in sessions:
             session_docs.append({**session, "status": "completed", "source": "simulator"})
             event_docs.extend(sim.explode_events(session))
+        interaction_docs.extend(
+            {**i, "source": "simulator"} for i in sim.generate_interactions(student, sessions)
+        )
 
     if profile_docs:
         db.profiles.insert_many(profile_docs)
     if session_docs:
         db.sessions.insert_many(session_docs)
+    if interaction_docs:
+        db.interactions.insert_many(interaction_docs)
     for i in range(0, len(event_docs), 5000):
         db.events.insert_many(event_docs[i : i + 5000])
 
     print(
         f"  synthetic students: {len(profile_docs)} profiles, {len(session_docs)} sessions, "
-        f"{len(event_docs)} events (calibration: {calibration})"
+        f"{len(event_docs)} events, {len(interaction_docs)} interactions "
+        f"(calibration: {calibration})"
     )
 
 

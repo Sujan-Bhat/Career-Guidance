@@ -1,5 +1,8 @@
 .PHONY: install-backend install-ml install-frontend install-all dev seed test lint train-fes train-fm train-dqn train-ensemble
 
+# prefer the project venv when it exists
+PYTHON ?= $(shell [ -x .venv/bin/python ] && echo .venv/bin/python || echo python)
+
 install-backend:
 	pip install -r backend/requirements.txt
 
@@ -25,13 +28,13 @@ lint:
 	python -m compileall -q backend ml llm_gateway data evaluation
 
 train-fes:
-	PYTHONPATH=ml python -m careermind_ml.train --module fes --config ml/configs/fes.yaml
+	PYTHONPATH=ml $(PYTHON) -m careermind_ml.train --module fes --config ml/configs/fes.yaml
 
 train-fm:
-	PYTHONPATH=ml python -m careermind_ml.train --module fm --config ml/configs/fm.yaml
+	PYTHONPATH=ml $(PYTHON) -m careermind_ml.train --module fm --config ml/configs/fm.yaml
 
 train-dqn:
-	PYTHONPATH=ml python -m careermind_ml.train --module dqn --config ml/configs/dqn.yaml
+	PYTHONPATH=ml $(PYTHON) -m careermind_ml.train --module dqn --config ml/configs/dqn.yaml
 
 train-ensemble:
-	PYTHONPATH=ml python -m careermind_ml.train --module ensemble --config ml/configs/ensemble.yaml
+	PYTHONPATH=ml $(PYTHON) -m careermind_ml.train --module ensemble --config ml/configs/ensemble.yaml

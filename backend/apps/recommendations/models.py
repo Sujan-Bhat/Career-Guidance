@@ -15,7 +15,7 @@ class Recommendation(Document):
     stage1_eligible = fields.BooleanField()
     stage2_cf_score = fields.FloatField()
     stage3_fm_score = fields.FloatField()
-    contributing_features = fields.ListField(fields.DictField())
+    contributing_features = fields.DictField()
     explanation = fields.StringField()
     decision = fields.StringField(choices=("pending", "accepted", "rejected"), default="pending")
     created_at = fields.DateTimeField(required=True)

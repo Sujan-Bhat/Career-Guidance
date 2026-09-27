@@ -23,9 +23,18 @@ def main() -> int:
         run_pipeline(config_path=args.config)
         return 0
     if args.module == "fm":
-        from careermind_ml.recommender.fm import train_fm  # noqa: F401
-        print("Phase 4: FM training not implemented yet")
-        return 1
+        from careermind_ml.recommender.features import load_fm_training_data
+        from careermind_ml.recommender.fm import train_fm
+        import yaml
+
+        config = {}
+        if args.config:
+            with open(args.config) as fh:
+                config = yaml.safe_load(fh) or {}
+        config = {**config.get("fm", {}), "stage1_eligibility_threshold": config.get("stage1_eligibility_threshold", 0.60)}
+        data = load_fm_training_data()
+        train_fm(data, config)
+        return 0
     if args.module == "dqn":
         from careermind_ml.rl.train import train_dqn  # noqa: F401
         print("Phase 6: DQN pre-training not implemented yet")

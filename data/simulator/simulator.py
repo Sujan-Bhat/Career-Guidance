@@ -49,23 +49,24 @@ class StudentSimulator:
     def __init__(self, config: dict | None = None, seed: int | None = None):
         self.config = {**DEFAULT_CONFIG, **(config or {})}
         self.rng = np.random.default_rng(seed)
-        self._career_by_category = self._load_careers()
+        self._career_by_category, self._careers = self._load_careers()
 
     # ------------------------------------------------------------------ setup
 
-    @staticmethod
-    def _load_careers() -> dict:
-        """category -> [career_id, ...] from the knowledge-graph seed (in sync
-        with what the recommender will use)."""
+    def _load_careers(self) -> tuple[dict, list]:
+        """(category -> [career_id, ...], full career dicts) from the
+        knowledge-graph seed (in sync with what the recommender will use)."""
         mapping = {cat: [] for cat in CAREER_CATEGORIES}
+        careers = []
         try:
             with open(SEED_PATH) as fh:
                 seed_data = json.load(fh)
-            for career in seed_data["careers"]:
+            careers = seed_data["careers"]
+            for career in careers:
                 mapping.setdefault(career["category"], []).append(career["id"])
         except (OSError, KeyError):
             pass  # fall back to empty mapping; outcomes use category labels only
-        return mapping
+        return mapping, careers
 
     @staticmethod
     def calibrate_from_oulad(raw_dir: str | pathlib.Path) -> dict:
@@ -270,6 +271,57 @@ class StudentSimulator:
             "career_category": career_category,
             "career_pathway_id": career_pathway_id,
         }
+
+    # ----------------------------------------------------------- interactions
+
+    def generate_interactions(self, student: dict, sessions: list[dict]) -> list[dict]:
+        """Implicit-feedback interactions per session (Phase 4: CF/FM training data).
+
+        Each session contributes one primary pathway engagement sampled from
+        the student's domain affinity, sometimes a course from that pathway's
+        typical courses, and occasionally an exploratory second pathway.
+        Engagement WEIGHT (the session's FES) is joined from fes_history at
+        model-build time — the interaction itself stores only the session key.
+        """
+        affinity = np.array([student["domain_affinity"][c] for c in CAREER_CATEGORIES])
+        affinity = affinity / affinity.sum()
+        typical_courses = {c["id"]: c.get("typical_courses", []) for c in self._careers}
+
+        interactions = []
+        for session in sessions:
+            session_key = f"{student['student_id']}:{session['session_index']}"
+            engaged = set()
+
+            def _sample_pathway() -> str | None:
+                cat_idx = self.rng.choice(len(CAREER_CATEGORIES), p=affinity)
+                candidates = self._career_by_category.get(CAREER_CATEGORIES[cat_idx]) or []
+                if not candidates:
+                    return None
+                return candidates[self.rng.integers(0, len(candidates))]
+
+            pathway = _sample_pathway()
+            if pathway is not None:
+                engaged.add(("pathway", pathway))
+                if self.rng.random() < 0.6 and typical_courses.get(pathway):
+                    course = typical_courses[pathway][self.rng.integers(0, len(typical_courses[pathway]))]
+                    engaged.add(("course", course))
+
+            if self.rng.random() < 0.25:  # exploratory second pathway
+                second = _sample_pathway()
+                if second:
+                    engaged.add(("pathway", second))
+
+            for item_type, item_id in sorted(engaged):
+                interactions.append(
+                    {
+                        "student": student["student_id"],
+                        "item_type": item_type,
+                        "item_id": item_id,
+                        "session": session_key,
+                        "date": session["date"],
+                    }
+                )
+        return interactions
 
     # --------------------------------------------------------------- events
 

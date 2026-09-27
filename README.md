@@ -183,8 +183,8 @@ replay buffer, target-network sync every 100 steps, Eq. 3 reward weights) live i
 0. **Skeleton** — structure, stubs, docker-compose, seed data
 1. **Data foundation** — OULAD ingestion (verified mirror), 200-student synthetic simulator calibrated to OULAD, knowledge-graph loader, pathways API
 2. **FES engine** — five sub-metrics, Eq. 2 per-student weight calibration (gates + population fallback), batch pipeline, FES read APIs
-3. **Backend core** (current state) — JWT auth (register/login/me/refresh), behavioural collector (session lifecycle + event ingestion), session-end FES via Celery, quiz attempts (FR04), frontend login + JWT'd tracking
-4. Recommender — KG filtering, FES-weighted CF, FM scoring, cascade API
+3. **Backend core** — JWT auth (register/login/me/refresh), behavioural collector (session lifecycle + event ingestion), session-end FES via Celery, quiz attempts (FR04), frontend login + JWT'd tracking
+4. **Recommender** (current state) — 3-stage cascade live: KG filtering (≥60%), FES-weighted CF re-ranking, trained FM (held-out AUC 0.84) with accept/reject logging; population-profile cold start
 5. Career prediction ensemble + feature attribution
 6. RL — simulator environment, DQN pre-training, online integration
 7. LLM gateway — chat, explanations (NFR07)
