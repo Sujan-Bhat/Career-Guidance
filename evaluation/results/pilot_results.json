@@ -70,9 +70,9 @@
     "dqn": {
       "available": true,
       "episodes": 1000,
-      "mean_reward_first": 6.8547,
-      "mean_reward_last": 8.5225,
-      "improvement": 1.6679,
+      "mean_reward_first": 6.4689,
+      "mean_reward_last": 8.9295,
+      "improvement": 2.4607,
       "final_epsilon": 0.05,
       "total_steps": 60000,
       "reward_weights": {
@@ -188,16 +188,16 @@
       },
       "reward_weights": {
         "{\"alpha\": 0.4, \"beta\": 0.3, \"delta\": 0.2, \"gamma\": 0.1}": {
-          "mean_reward_last50": 4.7736
+          "mean_reward_last50": 4.7095
         },
         "{\"alpha\": 0.7, \"beta\": 0.1, \"delta\": 0.1, \"gamma\": 0.1}": {
-          "mean_reward_last50": 3.8216
+          "mean_reward_last50": 3.987
         },
         "{\"alpha\": 0.2, \"beta\": 0.2, \"delta\": 0.2, \"gamma\": 0.4}": {
-          "mean_reward_last50": 14.2092
+          "mean_reward_last50": 14.7604
         },
         "{\"alpha\": 0.2, \"beta\": 0.1, \"delta\": 0.6, \"gamma\": 0.1}": {
-          "mean_reward_last50": 7.944
+          "mean_reward_last50": 7.8572
         }
       }
     }

@@ -78,9 +78,15 @@ careermind/
 ```bash
 cp .env.example .env        # fill in secrets (LLM API key, Django secret)
 make dev                    # mongo + redis + backend(:8000) + celery + frontend(:3000)
+
+# in a second terminal — load data into the (fresh) compose Mongo
+docker compose -f infra/docker-compose.yml run --rm web python /app/data/seeds/seed_mongo.py
 ```
 
 Then open http://localhost:3000 (frontend) and http://localhost:8000/api/v1/ (API).
+The images bake in `careermind_ml`/`careermind_llm` (editable) and the trained
+artifacts under `ml/artifacts/` — run `make train-fes train-fm train-dqn
+train-ensemble` on the host first if they are missing, then rebuild.
 
 ### Option B — Run locally, module by module
 
@@ -150,9 +156,10 @@ pip install -e "llm_gateway[dev]"  # Part A — provider SDKs optional
   `LLM_API_KEY` is set (see `.env.example`; the backend loads the repo-root
   `.env` automatically).
 - **MongoDB** (after the data-foundation steps): 18 career pathways + 20 skills,
-  200 synthetic student profiles (+ registered users), 2,400 behavioural
-  sessions, ~36.6k events, 4.3k learning interactions, 4 demo quizzes
-  (20 items), and the FES history/weight collections.
+  200 OULAD + 200 synthetic student profiles (+ registered users), ~13.5k
+  behavioural sessions, ~101k events, 6.4k learning resources, 4.3k learning
+  interactions, 4 demo quizzes (20 items), and the FES history/weight
+  collections.
 - **Evaluation:** `make eval` runs the four pilot studies and writes
   `evaluation/results/pilot_results.json` (FES validity, recommender
   benchmark, DQN convergence, sensitivity sweeps).
@@ -190,7 +197,7 @@ Four studies (paper Sec. VIII), results also written to
    stage-1 gate passes on average 16.2 of 18 pathways at the paper's 0.6
    threshold.
 3. **DQN convergence** — training curve read from
-   `ml/artifacts/dqn_training.json` (reward climbs ≈ +6.4 → +8.5 over
+   `ml/artifacts/dqn_training.json` (reward climbs ≈ +6.5 → +8.9 over
    1000 episodes).
 4. **Sensitivity** — sweeps over the stage-1 gate (hit@k 0.86 → 0.51 across
    0.4 → 0.8), EngagementSignal thresholds (the interaction-rate threshold is
@@ -219,10 +226,15 @@ replay buffer, target-network sync every 100 steps, Eq. 3 reward weights) live i
 3. **Backend core** — JWT auth (register/login/me/refresh), behavioural collector (session lifecycle + event ingestion), session-end FES via Celery, quiz attempts (FR04), frontend login + JWT'd tracking
 4. **Recommender** — 3-stage cascade live: KG filtering (≥60%), FES-weighted CF re-ranking, trained FM (held-out AUC 0.84) with accept/reject logging; population-profile cold start
 5. **Career prediction ensemble** — stacking RF+GBT+MLP → LR meta (held-out acc 0.93 incl. stated preferences; no-preference ablation 0.38), occlusion feature attribution, `GET /careers/predictions` + live `/prediction` page
-6. **RL adaptive feedback** — gymnasium simulator environment with the paper's 8 interventions, Eq. 3 reward (α·dFES + β·dSkill + γ·E + δ·CA), DQN pre-training (1000 episodes / 60k steps, reward +6.4 → +8.5), artifact serving, and `GET /rl/status` + `POST /rl/action` transition-logging API
+6. **RL adaptive feedback** — gymnasium simulator environment with the paper's 8 interventions, Eq. 3 reward (α·dFES + β·dSkill + γ·E + δ·CA), DQN pre-training (1000 episodes / 60k steps, reward +6.5 → +8.9), artifact serving, and `GET /rl/status` + `POST /rl/action` transition-logging API
 7. **LLM gateway (Part A)** — OpenAI/Anthropic/Gemini adapters, agency-preserving grounded guidance chat (`POST /llm/chat`, per-student history window), LLM quiz generation (`POST /llm/quiz/generate`), cached recommendation explanations (`GET /recommendations/<id>/explain`), live `/chat` page; 503 without `LLM_API_KEY`, 502 on provider failure
 8. **Full frontend** — live recommendations page (cascade provenance, accept/reject, "Why this?" explanations), quiz page (seeded demos + AI generation, per-item attempt recording into QAP), dashboard 14-day FES trend chart, live `/chat` and `/prediction` pages
 9. **Evaluation / pilot study** — `evaluation/` package: leave-one-out benchmark (cascade vs kg/cf/fm/popularity, P@k/R@k/nDCG@k/Hit@k + gate pass-rate diagnostic), FES predictive-validity study, DQN convergence readout, and five sensitivity sweeps (Sec. VIII #4); `make eval` runs all four studies into `evaluation/results/pilot_results.json`; simulator fixes surfaced along the way (EngagementSignal action-density reachable, full skill profiles so the eligibility gate measures skill coverage rather than assessment coverage, idempotent event seeding)
-10. Deployment polish (remaining)
+10. **Deployment polish** — Dockerfiles rebuilt around a repo-root context so
+    the images ship `careermind_ml` + `careermind_llm` (editable) with CPU
+    torch, baked artifacts, and the seeder; compose validated end-to-end
+    (5 services, in-container seeding, register → recommend → RL E2E smoke);
+    `.dockerignore`s, env-backed seeder defaults, and this README/architecture
+    pass
 
 See `docs/architecture.md` for the component/data-flow diagram (Fig. 1).

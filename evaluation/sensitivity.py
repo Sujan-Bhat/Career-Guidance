@@ -108,9 +108,12 @@ def _run_engagement(parameter: str, value: float) -> dict:
     """Flip-rate of the binary EngagementSignal vs the paper default."""
     from careermind_ml.fes.engagement import engagement_signal
 
+    # Platform sessions only: OULAD rows lack quiz-attempt data, so their
+    # zeros would be structural rather than behavioural (pipeline scope).
     sessions = list(
         _mongo_db().sessions.find(
-            {}, {"duration_minutes": 1, "interaction_count": 1, "quiz_items": 1}
+            {"source": {"$in": ["simulator", "collector"]}},
+            {"duration_minutes": 1, "interaction_count": 1, "quiz_items": 1},
         )
     )
     default_kw = {k: DEFAULTS[k] for k in _ENGAGEMENT_PARAM}

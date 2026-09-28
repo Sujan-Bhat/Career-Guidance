@@ -87,8 +87,9 @@ def train_dqn(env: gym.Env, agent, config: dict) -> dict:
         "mean_loss_last100": float(np.mean(losses[-100:])) if losses else None,
         "artifact": str(artifact_path),
     }
-    # full curve for the pilot study's DQN-convergence analysis (Sec. VIII #3)
-    curve_path = artifact_path.parent / "dqn_training.json"
+    # full curve for the pilot study's DQN-convergence analysis (Sec. VIII #3);
+    # named after the artifact so short sweep runs don't clobber the real curve
+    curve_path = artifact_path.parent / f"{artifact_path.stem}_training.json"
     curve_path.write_text(
         json.dumps(
             {

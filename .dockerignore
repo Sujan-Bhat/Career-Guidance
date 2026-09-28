@@ -1,0 +1,15 @@
+.git
+.venv
+.env
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.next
+**/node_modules
+frontend/node_modules
+frontend/.next
+ml/artifacts/_sensitivity_*.pt
+evaluation/results
+infra
+docs
+README.md

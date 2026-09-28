@@ -13,6 +13,7 @@ Usage:
 """
 import argparse
 import json
+import os
 import pathlib
 import sys
 
@@ -129,8 +130,11 @@ def seed_quizzes(db) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Seed CAREERMIND MongoDB")
-    parser.add_argument("--uri", default="mongodb://localhost:27017")
-    parser.add_argument("--db", default="careermind")
+    parser.add_argument(
+        "--uri", default=os.getenv("MONGO_URI", "mongodb://localhost:27017"),
+        help="Mongo URI (default: $MONGO_URI or localhost:27017)",
+    )
+    parser.add_argument("--db", default=os.getenv("MONGO_DB_NAME", "careermind"))
     parser.add_argument("--students", type=int, default=200)
     parser.add_argument("--sessions-per-student", type=int, default=12)
     parser.add_argument("--seed", type=int, default=42, help="Simulator RNG seed (deterministic)")

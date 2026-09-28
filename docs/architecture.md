@@ -38,9 +38,9 @@ Six loosely coupled components in a continuous feedback loop, backed by MongoDB.
 
                      ┌──────────────────────────┐
                      │        MongoDB           │  profiles, sessions, events,
-                     │  (mongoengine, Celery/   │  fes_history, fes_weights,
-                     │   Redis async jobs)      │  recommendations, rl_log, ...
-                     └──────────────────────────┘
+                     │  (mongoengine, Celery/   │  interactions, fes_history,
+                     │   Redis async jobs)      │  fes_weights, recommendations,
+                     └──────────────────────────┘  rl_transition, quizzes, ...
 ```
 
 ## Component table
@@ -54,6 +54,7 @@ Six loosely coupled components in a continuous feedback loop, backed by MongoDB.
 | RL Adaptive Feedback | `ml/careermind_ml/rl` + `backend/apps/rl_feedback` | V-C | 6 |
 | Career Path Prediction | `ml/careermind_ml/career_prediction` + `backend/apps/careers` | V-D | 5 |
 | LLM Gateway (Part A) | `llm_gateway/` + `backend/apps/llm_proxy` | NFR07 | 7 |
+| Evaluation / pilot study | `evaluation/` (`make eval`) | VII–VIII | 9 |
 
 ## Data flow (one loop iteration)
 
