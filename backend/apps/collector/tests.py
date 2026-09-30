@@ -1,6 +1,8 @@
 """Collector tests (Phase 3): session lifecycle, event ingestion, session-end FES."""
 from datetime import datetime, timedelta
 
+import pytest
+
 
 def test_session_start_creates_active_session(registered):
     client, user = registered
@@ -82,3 +84,67 @@ def test_session_end_is_idempotent(registered):
     session_id = client.post("/api/v1/collector/sessions/start").data["session_id"]
     assert client.post(f"/api/v1/collector/sessions/{session_id}/end").status_code == 200
     assert client.post(f"/api/v1/collector/sessions/{session_id}/end").status_code == 409
+
+
+def test_idle_gap_never_exceeds_dwell(registered):
+    """idle_start fired BEFORE the resource was opened must not leak into the
+    visit: the gap would otherwise be measured from before `open_at`, making
+    idle_gap_seconds > dwell_seconds and corrupting the DFET heuristic."""
+    client, _ = registered
+    session_id = client.post("/api/v1/collector/sessions/start").data["session_id"]
+
+    base = datetime.utcnow() + timedelta(seconds=1)
+    events = [
+        # idle while NO visit is open (10 minutes before the resource opens)
+        {"type": "idle_start", "timestamp": base.isoformat()},
+        {
+            "type": "resource_open",
+            "resource_id": "r1",
+            "metadata": {"resource_type": "article"},
+            "timestamp": (base + timedelta(minutes=10)).isoformat(),
+        },
+        {
+            "type": "resource_close",
+            "resource_id": "r1",
+            "metadata": {"resource_type": "article"},
+            "timestamp": (base + timedelta(minutes=11)).isoformat(),
+        },
+        # and a normal in-visit idle interval for contrast
+        {
+            "type": "resource_open",
+            "resource_id": "r2",
+            "metadata": {"resource_type": "article"},
+            "timestamp": (base + timedelta(minutes=12)).isoformat(),
+        },
+        {"type": "idle_start", "timestamp": (base + timedelta(minutes=13)).isoformat()},
+        {"type": "idle_end", "timestamp": (base + timedelta(minutes=14)).isoformat()},
+        {
+            "type": "resource_close",
+            "resource_id": "r2",
+            "metadata": {"resource_type": "article"},
+            "timestamp": (base + timedelta(minutes=15)).isoformat(),
+        },
+    ]
+    assert client.post(
+        "/api/v1/collector/events/batch",
+        {"session_id": session_id, "events": events},
+        format="json",
+    ).status_code == 200
+
+    from apps.collector.models import BehaviourSession
+    from apps.collector.services import recompute_session_aggregates
+
+    session = BehaviourSession.objects(pk=session_id).first()
+    session.started_at = base
+    session.ended_at = base + timedelta(minutes=16)
+    recompute_session_aggregates(session)
+
+    session.reload()
+    assert len(session.resource_visits) == 2
+    first, second = session.resource_visits
+    # pre-visit idle is discarded entirely
+    assert first["idle_gap_seconds"] == 0.0
+    # in-visit idle (1 min of a 3 min dwell) is kept
+    assert second["idle_gap_seconds"] == pytest.approx(60.0)
+    for visit in session.resource_visits:
+        assert visit["idle_gap_seconds"] <= visit["dwell_seconds"]

@@ -67,6 +67,17 @@ class CareermindJWTAuthentication(authentication.BaseAuthentication):
 
     keyword = "Bearer"
 
+    def authenticate_header(self, request) -> str:
+        """WWW-Authenticate value for failed authentication.
+
+        Without this DRF treats the authenticator as providing no challenge
+        and downgrades every AuthenticationFailed (expired / malformed /
+        unknown-subject token) from 401 to 403 — which is exactly the status
+        the frontend's silent-refresh interceptor keys on
+        (frontend/src/lib/api/client.ts), so expired access tokens never
+        triggered a refresh."""
+        return self.keyword
+
     def authenticate(self, request):
         header = authentication.get_authorization_header(request).split()
         if not header or header[0].lower() != self.keyword.lower().encode():
@@ -78,6 +89,8 @@ class CareermindJWTAuthentication(authentication.BaseAuthentication):
 
         try:
             profile = StudentProfile.objects.get(pk=payload["sub"])
-        except (DoesNotExist, Exception):
+        except DoesNotExist:
+            # only an unknown/deleted subject is an auth failure; a Mongo
+            # outage or timeout must surface as a 500, not "Profile not found"
             raise exceptions.AuthenticationFailed("Profile not found")
         return (profile, header[1].decode())

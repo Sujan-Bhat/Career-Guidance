@@ -1,32 +1,32 @@
 {
   "studies": {
     "fes-validity": {
-      "n_students": 201,
+      "n_students": 200,
       "n_per_student_weights": 198,
-      "n_population_weights": 3,
+      "n_population_weights": 2,
       "all": {
-        "fes": 0.19990312015958514,
-        "tcr": 0.6443317650839864,
-        "sci": 0.10046994826341847,
-        "dfet": -0.0458740713142862,
-        "qap": 0.06528724228470477,
-        "lrds": 0.05713564126330939
+        "fes": 0.18130617141102257,
+        "tcr": 0.6367531263024473,
+        "sci": 0.06668207256259552,
+        "dfet": -0.021801946621768965,
+        "qap": 0.10897509952076923,
+        "lrds": 0.01073301053424821
       },
       "per_student_weights": {
-        "fes": 0.18043650226085312,
-        "tcr": 0.6395570793643711,
-        "sci": 0.1113331372685941,
-        "dfet": -0.03232029246215884,
-        "qap": 0.0563177033162171,
-        "lrds": 0.06918377203994691
+        "fes": 0.16986330658935953,
+        "tcr": 0.6344494258775167,
+        "sci": 0.05577388455782773,
+        "dfet": -0.028606076561723058,
+        "qap": 0.09462108526726533,
+        "lrds": 0.007242632860421672
       },
       "population_weights": {
-        "fes": 0.9625897823597563,
-        "tcr": 0.9398146429020247,
-        "sci": 0.6713188779714365,
-        "dfet": -0.982311510912057,
-        "qap": 0.7400218077779391,
-        "lrds": 0.5210178729414526
+        "fes": null,
+        "tcr": null,
+        "sci": null,
+        "dfet": null,
+        "qap": null,
+        "lrds": null
       }
     },
     "benchmark": {
@@ -36,10 +36,10 @@
       "mean_candidates": 16.18,
       "metrics": {
         "cascade": {
-          "precision@k": 0.084,
-          "recall@k": 0.84,
-          "ndcg@k": 0.5015000111105458,
-          "hit@k": 0.84
+          "precision@k": 0.0815,
+          "recall@k": 0.815,
+          "ndcg@k": 0.4882958494055351,
+          "hit@k": 0.815
         },
         "kg_only": {
           "precision@k": 0.055,
@@ -50,19 +50,19 @@
         "cf_only": {
           "precision@k": 0.079,
           "recall@k": 0.79,
-          "ndcg@k": 0.45970749673233213,
+          "ndcg@k": 0.4461847323985348,
           "hit@k": 0.79
         },
         "fm_only": {
-          "precision@k": 0.086,
-          "recall@k": 0.86,
-          "ndcg@k": 0.5111221822512113,
-          "hit@k": 0.86
+          "precision@k": 0.08650000000000001,
+          "recall@k": 0.865,
+          "ndcg@k": 0.5066877284099526,
+          "hit@k": 0.865
         },
         "popularity": {
           "precision@k": 0.07200000000000001,
           "recall@k": 0.72,
-          "ndcg@k": 0.40311348934203173,
+          "ndcg@k": 0.401891220032363,
           "hit@k": 0.72
         }
       }
@@ -85,119 +85,119 @@
     "sensitivity": {
       "stage1_eligibility_threshold": {
         "0.4": {
-          "precision@k": 0.0855,
-          "recall@k": 0.855,
-          "ndcg@k": 0.5090604197595998,
-          "hit@k": 0.855
+          "precision@k": 0.086,
+          "recall@k": 0.86,
+          "ndcg@k": 0.5046875737202182,
+          "hit@k": 0.86
         },
         "0.5": {
-          "precision@k": 0.0855,
-          "recall@k": 0.855,
-          "ndcg@k": 0.5090604197595998,
-          "hit@k": 0.855
+          "precision@k": 0.086,
+          "recall@k": 0.86,
+          "ndcg@k": 0.5046875737202182,
+          "hit@k": 0.86
         },
         "0.6": {
-          "precision@k": 0.084,
-          "recall@k": 0.84,
-          "ndcg@k": 0.5015000111105458,
-          "hit@k": 0.84
+          "precision@k": 0.0815,
+          "recall@k": 0.815,
+          "ndcg@k": 0.4882958494055351,
+          "hit@k": 0.815
         },
         "0.7": {
           "precision@k": 0.07600000000000001,
           "recall@k": 0.76,
-          "ndcg@k": 0.4710703163440016,
+          "ndcg@k": 0.46420873130693224,
           "hit@k": 0.76
         },
         "0.8": {
           "precision@k": 0.051000000000000004,
           "recall@k": 0.51,
-          "ndcg@k": 0.3207257211869241,
+          "ndcg@k": 0.3272495636555292,
           "hit@k": 0.51
         }
       },
       "min_session_minutes": {
         "10": {
           "flip_rate": 0.0,
-          "positive_rate": 0.1961682632236568,
-          "n_sessions": 2401
+          "positive_rate": 0.19625,
+          "n_sessions": 2400
         },
         "15": {
           "flip_rate": 0.0,
-          "positive_rate": 0.1961682632236568,
-          "n_sessions": 2401
+          "positive_rate": 0.19625,
+          "n_sessions": 2400
         },
         "20": {
-          "flip_rate": 0.0020824656393169513,
-          "positive_rate": 0.19408579758433986,
-          "n_sessions": 2401
+          "flip_rate": 0.0020833333333333333,
+          "positive_rate": 0.19416666666666665,
+          "n_sessions": 2400
         },
         "25": {
-          "flip_rate": 0.0058309037900874635,
-          "positive_rate": 0.19033735943356936,
-          "n_sessions": 2401
+          "flip_rate": 0.005833333333333334,
+          "positive_rate": 0.19041666666666668,
+          "n_sessions": 2400
         }
       },
       "min_interactions_per_min": {
         "1.5": {
-          "flip_rate": 0.4731361932528113,
-          "positive_rate": 0.6693044564764682,
-          "n_sessions": 2401
+          "flip_rate": 0.47333333333333333,
+          "positive_rate": 0.6695833333333333,
+          "n_sessions": 2400
         },
         "2.0": {
-          "flip_rate": 0.36609745939192,
-          "positive_rate": 0.5622657226155768,
-          "n_sessions": 2401
+          "flip_rate": 0.36625,
+          "positive_rate": 0.5625,
+          "n_sessions": 2400
         },
         "2.5": {
-          "flip_rate": 0.19200333194502292,
-          "positive_rate": 0.3881715951686797,
-          "n_sessions": 2401
+          "flip_rate": 0.19208333333333333,
+          "positive_rate": 0.3883333333333333,
+          "n_sessions": 2400
         },
         "3.0": {
           "flip_rate": 0.0,
-          "positive_rate": 0.1961682632236568,
-          "n_sessions": 2401
+          "positive_rate": 0.19625,
+          "n_sessions": 2400
         },
         "4.0": {
-          "flip_rate": 0.17409412744689712,
-          "positive_rate": 0.022074135776759683,
-          "n_sessions": 2401
+          "flip_rate": 0.17416666666666666,
+          "positive_rate": 0.022083333333333333,
+          "n_sessions": 2400
         }
       },
       "min_sessions": {
         "4": {
-          "per_student_share": 0.9800995024875622,
-          "mean_abs_fes_delta": 0.11151973662911559,
-          "n_students": 201
+          "per_student_share": 0.99,
+          "mean_abs_fes_delta": 0.0,
+          "n_students": 200
         },
         "6": {
-          "per_student_share": 0.9800995024875622,
-          "mean_abs_fes_delta": 0.11151973662911559,
-          "n_students": 201
+          "per_student_share": 0.99,
+          "mean_abs_fes_delta": 0.0,
+          "n_students": 200
         },
         "8": {
-          "per_student_share": 0.9800995024875622,
-          "mean_abs_fes_delta": 0.11151973662911559,
-          "n_students": 201
+          "per_student_share": 0.99,
+          "mean_abs_fes_delta": 0.0,
+          "n_students": 200
         },
         "12": {
-          "per_student_share": 0.9800995024875622,
-          "mean_abs_fes_delta": 0.11151973662911559,
-          "n_students": 201
+          "per_student_share": 0.99,
+          "mean_abs_fes_delta": 0.0,
+          "n_students": 200
         }
       },
       "reward_weights": {
         "{\"alpha\": 0.4, \"beta\": 0.3, \"delta\": 0.2, \"gamma\": 0.1}": {
-          "mean_reward_last50": 4.7095
+          "mean_reward_last50": 4.6327
         },
         "{\"alpha\": 0.7, \"beta\": 0.1, \"delta\": 0.1, \"gamma\": 0.1}": {
-          "mean_reward_last50": 3.987
+          "mean_reward_last50": 4.1176
         },
         "{\"alpha\": 0.2, \"beta\": 0.2, \"delta\": 0.2, \"gamma\": 0.4}": {
-          "mean_reward_last50": 14.7604
+          "mean_reward_last50": 14.5887
         },
         "{\"alpha\": 0.2, \"beta\": 0.1, \"delta\": 0.6, \"gamma\": 0.1}": {
-          "mean_reward_last50": 7.8572
+          "mean_reward_last50": 7.636
         }
       }
     }

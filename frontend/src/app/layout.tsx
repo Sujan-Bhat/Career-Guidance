@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "./providers";
 import { TrackingProvider } from "@/lib/tracking/TrackingProvider";
+import { PageTracking } from "@/components/PageTracking";
 
 export const metadata: Metadata = {
   title: "CAREERMIND",
@@ -13,7 +14,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className="min-h-screen bg-slate-50 text-slate-900">
         <Providers>
-          <TrackingProvider>{children}</TrackingProvider>
+          <TrackingProvider>
+            <PageTracking />
+            {children}
+          </TrackingProvider>
         </Providers>
       </body>
     </html>

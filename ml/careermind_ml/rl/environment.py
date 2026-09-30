@@ -7,7 +7,7 @@ State (17-dim, all components normalised to ~[0, 1]):
     [0:5]   last five session FES values (padded with 0)
     [5:10]  five key subject grades / 100 (padded with population 0.7)
     [10:15] top five skill-assessment scores / 100 (padded with 0)
-    [15]    active career-pathway identifier (index / 17)
+    [15]    active career-pathway identifier (index / pathway count)
     [16]    recommendation acceptance/rejection ratio over last ten
             sessions (0.5 neutral before any decisions)
 
@@ -59,7 +59,7 @@ ACTION_NAMES = [
 ]
 
 _LATENT_CLIP = (0.05, 0.98)
-_MAX_PATHWAY_INDEX = 17  # 18 pathways -> index / 17 in [0, 1]
+_MAX_PATHWAY_INDEX = 18  # live pathway count; index / count keeps state[15] in [0, 1)
 
 
 class CareerGuidanceEnv(gym.Env):
@@ -87,8 +87,8 @@ class CareerGuidanceEnv(gym.Env):
         self._student = None
         self._affinity: dict = {}
         self._fes_history: list[float] = []
-        self._login_minutes: list[int] = []
-        self._durations: list[float] = []
+        self._sci_login_minutes: list[int] = []
+        self._sci_durations: list[float] = []
         self._grades: dict = {}
         self._skill_scores: dict = {}
         self._active_pathway = self._pathway_ids[0] if self._pathway_ids else "c01"
@@ -97,13 +97,22 @@ class CareerGuidanceEnv(gym.Env):
 
     # ------------------------------------------------------------------ helpers
 
-    def _session_fes(self, session: dict) -> float:
-        """Uniform-weight mean of the available paper sub-metrics ([0, 1])."""
+    def _session_fes(self, session: dict, sci_login_minutes=None, sci_durations=None) -> float:
+        """Uniform-weight mean of the available paper sub-metrics ([0, 1]).
+
+        SCI uses the accumulating per-session window (login times + durations,
+        the data SCI actually models); the raw session dict has no such fields,
+        so the session-scoped fallback is `None`-safe excluded pairwise.
+        """
+        if sci_login_minutes is None:
+            sci_login_minutes = self._sci_login_minutes
+        if sci_durations is None:
+            sci_durations = self._sci_durations
         parts = [
             m
             for m in (
                 task_completion_rate(session.get("tasks_started"), session.get("tasks_completed")),
-                session_consistency_index(self._login_minutes, self._durations),
+                session_consistency_index(sci_login_minutes, sci_durations),
                 distraction_free_engagement_time(session.get("resource_visits"), session.get("duration_minutes")),
                 quiz_attempt_persistence(
                     session.get("quiz_items"), session.get("quiz_items_correct"), session.get("quiz_reattempts")
@@ -185,8 +194,9 @@ class CareerGuidanceEnv(gym.Env):
         self._skill_scores = dict(outcomes.get("skill_scores") or {})
         self._active_pathway = outcomes.get("career_pathway_id") or (self._pathway_ids[0] if self._pathway_ids else "c01")
 
-        self._login_minutes = [int(s["login_minute_of_day"]) for s in seed_sessions]
-        self._durations = [float(s["duration_minutes"]) for s in seed_sessions]
+        # SCI window: per-session daily login-time/duration data (2+ points).
+        self._sci_login_minutes = [int(s["login_minute_of_day"]) for s in seed_sessions]
+        self._sci_durations = [float(s["duration_minutes"]) for s in seed_sessions]
         self._fes_history = [self._session_fes(s) for s in seed_sessions]
         self._acceptances = []
         self._step_count = 0
@@ -207,8 +217,8 @@ class CareerGuidanceEnv(gym.Env):
 
         # advance one session under the post-intervention latents
         session = self.simulator.generate_sessions(self._student, n_sessions=1)[0]
-        self._login_minutes.append(int(session["login_minute_of_day"]))
-        self._durations.append(float(session["duration_minutes"]))
+        self._sci_login_minutes.append(int(session["login_minute_of_day"]))
+        self._sci_durations.append(float(session["duration_minutes"]))
         session_fes = self._session_fes(session)
         self._fes_history.append(session_fes)
 

@@ -59,17 +59,31 @@ def _parse_items(raw: str, n_items: int, difficulty: int) -> list[dict]:
         if not isinstance(entry, dict):
             continue
         question = str(entry.get("question") or "").strip()
-        options = [str(o).strip() for o in (entry.get("options") or []) if str(o).strip()]
-        if not question or len(options) < 2:
+        # Drop blank options, remembering where each survivor came from: the
+        # model produced `answer` as an index into the ORIGINAL list, so
+        # compacting first silently shifts the correct answer onto the wrong
+        # option and the quiz grades the student incorrectly.
+        kept = [
+            (index, text)
+            for index, text in enumerate(str(o) for o in (entry.get("options") or []))
+            if text.strip()
+        ]
+        if not question or len(kept) < 2:
             continue
+        remap = {original: compact for compact, (original, _text) in enumerate(kept)}
+        options = [text.strip() for _original, text in kept]
+
         answer = entry.get("answer")
-        if isinstance(answer, str) and answer.strip().upper() in "ABCDEFGH" and len(answer.strip()) == 1:
+        if isinstance(answer, str) and len(answer.strip()) == 1 and answer.strip().upper() in "ABCDEFGH":
             answer = ord(answer.strip().upper()) - ord("A")  # letter -> index
         try:
             answer = int(answer)
         except (TypeError, ValueError):
             continue
-        if not 0 <= answer < len(options):
+        # original index -> compacted index; None when the answer pointed at a
+        # blank option or outside the list entirely, so the item is discarded
+        answer = remap.get(answer)
+        if answer is None:
             continue
         try:
             item_difficulty = int(entry.get("difficulty", difficulty))

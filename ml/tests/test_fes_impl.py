@@ -216,6 +216,25 @@ class TestCalibrateStudentWeights:
         w = calibrate_student_weights(pairs)
         assert w is not None
 
+    def test_session_and_outcome_gates_are_independent(self):
+        # 10 completed sessions, only 1 graded outcome: the session gate passes
+        # but min_graded_outcomes=2 is not met -> population fallback.
+        pairs = [{k: None for k in SUBMETRICS} for _ in range(9)]
+        pairs += self._informative_pairs(1)
+        assert len(pairs) == 10
+        assert calibrate_student_weights(pairs) is None
+
+    def test_sessions_gate_counts_ungraded_sessions(self):
+        # 10 completed sessions with only 5 graded: previously this failed the
+        # (mislabelled) "8 completed sessions" gate because it counted graded
+        # sessions only. Both gates must now be evaluated independently.
+        graded = self._informative_pairs(5)
+        ungraded = [{k: None for k in SUBMETRICS} for _ in range(5)]
+        pairs = graded + ungraded
+        w = calibrate_student_weights(pairs)
+        assert w is not None
+        assert sum(w.values()) == pytest.approx(1.0)
+
 
 class TestPopulationWeights:
     def test_pooled_calibration(self):

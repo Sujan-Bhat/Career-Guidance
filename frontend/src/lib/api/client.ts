@@ -36,8 +36,7 @@ api.interceptors.response.use(
           window.localStorage.setItem("cm_access_token", data.access);
           return api(original);
         } catch {
-          window.localStorage.removeItem("cm_access_token");
-          window.localStorage.removeItem("cm_refresh_token");
+          clearTokens(); // notifies auth subscribers: the session is over
         }
       }
     }
@@ -45,14 +44,47 @@ api.interceptors.response.use(
   }
 );
 
+/**
+ * Auth store.
+ *
+ * Login / logout are the only operations that bump `authVersion`: subscribers
+ * (notably TrackingProvider) re-run their session lifecycle when it changes,
+ * so logging in without a full page reload still opens a behavioural session.
+ *
+ * The 401 refresh interceptor below deliberately writes the rotated access
+ * token straight to localStorage WITHOUT bumping the version — a refresh is
+ * not a login, and notifying would tear down and reopen the session on every
+ * token rotation.
+ */
+let authVersion = 0;
+const authListeners = new Set<() => void>();
+
+function notifyAuthChange() {
+  authVersion += 1;
+  authListeners.forEach((listener) => listener());
+}
+
+export function subscribeAuth(listener: () => void): () => void {
+  authListeners.add(listener);
+  return () => {
+    authListeners.delete(listener);
+  };
+}
+
+export function getAuthVersion(): number {
+  return authVersion;
+}
+
 export function storeTokens(access: string, refresh: string) {
   window.localStorage.setItem("cm_access_token", access);
   window.localStorage.setItem("cm_refresh_token", refresh);
+  notifyAuthChange();
 }
 
 export function clearTokens() {
   window.localStorage.removeItem("cm_access_token");
   window.localStorage.removeItem("cm_refresh_token");
+  notifyAuthChange();
 }
 
 export function isLoggedIn(): boolean {

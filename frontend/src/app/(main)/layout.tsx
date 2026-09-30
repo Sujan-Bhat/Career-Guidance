@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import LogoutButton from "@/components/LogoutButton";
+
 const NAV = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/recommendations", label: "Recommendations" },
@@ -24,6 +26,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
             {item.label}
           </Link>
         ))}
+        <LogoutButton />
       </nav>
       <main className="flex-1 p-8">{children}</main>
     </div>

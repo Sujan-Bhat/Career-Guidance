@@ -1,4 +1,6 @@
 """Career prediction ensemble tests (Phase 5): features, stacking, attribution."""
+import json
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -7,6 +9,7 @@ from careermind_ml.career_prediction.attribution import top_contributing_feature
 from careermind_ml.career_prediction.ensemble import (
     ARTIFACTS_DIR,
     build_ensemble,
+    load_artifact,
     train_ensemble,
 )
 from careermind_ml.career_prediction.features import (
@@ -149,6 +152,29 @@ def test_train_ensemble_skips_ablation_when_preferences_disabled(tmp_path, monke
     config = {**FAST_CONFIG, "include_preferences": False}
     metrics = train_ensemble({"students": students}, config)
     assert "without_preferences" not in metrics
+
+
+@pytest.mark.parametrize("include_preferences", [True, False])
+def test_artifact_columns_match_the_fitted_model(tmp_path, monkeypatch, include_preferences):
+    """The served model is ALWAYS refit on the preference-augmented frame, so
+    the persisted column list must come from the fitted frame — deriving it
+    from `config["include_preferences"]` writes a 24-column list under a
+    30-column estimator and load_artifact() then fails at predict time."""
+    monkeypatch.setattr("careermind_ml.career_prediction.ensemble.ARTIFACTS_DIR", tmp_path)
+    students = _make_students(8)
+    config = {**FAST_CONFIG, "include_preferences": include_preferences}
+    train_ensemble({"students": students}, config)
+
+    artifact = load_artifact()
+    assert len(artifact["columns"]) == artifact["model"].n_features_in_
+    assert list(artifact["columns"]) == list(ALL_COLUMNS)
+
+    spec = json.loads((tmp_path / "ensemble_spec.json").read_text())
+    assert spec["columns"] == artifact["columns"]
+
+    row = feature_row(students[0], load_skill_categories(), True, artifact["population_defaults"])
+    x = pd.DataFrame([row], columns=artifact["columns"])
+    assert artifact["model"].predict_proba(x)[0].sum() == pytest.approx(1.0)
 
 
 def test_attribution_top_k_features(tmp_path, monkeypatch):

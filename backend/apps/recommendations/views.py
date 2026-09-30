@@ -59,7 +59,9 @@ def _serialize(doc: Recommendation, result: dict) -> dict:
         "name": result["name"],
         "category": result["category"],
         "stage1_eligibility": result["stage1_eligibility"],
+        "stage1_eligible": result["stage1_eligible"],
         "prerequisites_met": result["prerequisites_met"],
+        "prerequisites_fraction": result["prerequisites_fraction"],
         "stage2_cf_score": result["stage2_cf_score"],
         "stage3_fm_score": result["stage3_fm_score"],
         "contributing_features": result["contributing_features"],
@@ -92,7 +94,7 @@ class RecommendationListView(APIView):
                 student=request.user.student_id,
                 item_type="pathway",
                 item_id=ranked["id"],
-                stage1_eligible=ranked["stage1_eligibility"],
+                stage1_eligible=ranked["stage1_eligible"],
                 stage2_cf_score=ranked["stage2_cf_score"],
                 stage3_fm_score=ranked["stage3_fm_score"],
                 contributing_features=ranked["contributing_features"],
@@ -124,7 +126,33 @@ class _DecisionView(APIView):
             return Response({"detail": f"Already {doc.decision}"}, status=409)
         doc.decision = self.decision
         doc.save()
+        if self.decision == "accepted":
+            _record_interaction(request.user.student_id, doc.item_id)
         return Response({"recommendation_id": str(doc.pk), "decision": doc.decision})
+
+
+def _record_interaction(student_id: str, item_id: str) -> None:
+    """Mirror an accepted recommendation into the `interactions` collection.
+
+    `interactions` is the implicit-feedback table the cascade's stage-2 CF and
+    the career ensemble's exp_* features read. It is seeded by
+    data/seeds/seed_mongo.py for simulated students, so live users previously
+    contributed nothing: stage-2 CF saw an empty history and exp_interactions /
+    exp_distinct_items were permanently 0. Writing on accept closes that gap
+    and means the next `make train-fm` / `make train-ensemble` includes real
+    behaviour. Rejections are deliberately not written (not positive feedback).
+    """
+    db = connection.get_db("default")
+    now = datetime.utcnow()
+    db.interactions.update_one(
+        {"student": student_id, "item_id": item_id},
+        {
+            "$set": {"student": student_id, "item_id": item_id, "decision": "accepted",
+                     "updated_at": now},
+            "$setOnInsert": {"created_at": now},
+        },
+        upsert=True,
+    )
 
 
 class AcceptView(_DecisionView):

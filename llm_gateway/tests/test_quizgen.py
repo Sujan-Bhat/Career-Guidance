@@ -93,3 +93,39 @@ def test_explanation_cites_provenance_and_features():
 def test_explanation_rejects_empty_reply():
     with pytest.raises(ValueError, match="empty explanation"):
         generate_explanation({"item_id": "c01"}, [], client=FakeClient("  "))
+
+
+def test_blank_option_does_not_shift_the_answer_index():
+    """Compacting the option list must remap `answer`, otherwise dropping a
+    blank option regrades the item: the model's index 2 ("D") would become
+    index 2 in a 3-option list ("C"), so the student is marked wrong."""
+    raw = json.dumps(
+        [
+            {"question": "Pick one", "options": ["A", "", "C", "D"], "answer": 2,
+             "difficulty": 2},
+        ]
+    )
+    items = generate_quiz_items("java", 2, n_items=1, client=FakeClient(raw))
+    assert len(items) == 1
+    assert items[0]["options"] == ["A", "C", "D"]
+    assert items[0]["options"][items[0]["answer"]] == "C"
+
+
+def test_letter_answer_survives_option_compaction():
+    raw = json.dumps(
+        [{"question": "Pick", "options": ["", "X", "Y"], "answer": "C", "difficulty": 1}]
+    )
+    items = generate_quiz_items("java", 1, n_items=1, client=FakeClient(raw))
+    assert items[0]["options"] == ["X", "Y"]
+    assert items[0]["options"][items[0]["answer"]] == "Y"  # C -> index 2 -> "Y"
+
+
+def test_answer_pointing_at_a_blank_option_is_dropped():
+    raw = json.dumps(
+        [
+            {"question": "skip me", "options": ["A", "", "C"], "answer": 1, "difficulty": 1},
+            {"question": "keep me", "options": ["A", "B", "C"], "answer": 1, "difficulty": 1},
+        ]
+    )
+    items = generate_quiz_items("java", 1, n_items=2, client=FakeClient(raw))
+    assert [i["question"] for i in items] == ["keep me"]

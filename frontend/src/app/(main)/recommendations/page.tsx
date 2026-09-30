@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { endpoints } from "@/lib/api/client";
+import { useTracking } from "@/lib/tracking/TrackingProvider";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 
@@ -11,8 +12,10 @@ type Recommendation = {
   id: string;
   name: string;
   category: string;
-  stage1_eligibility: boolean;
-  prerequisites_met: number;
+  stage1_eligibility: number;
+  stage1_eligible: boolean;
+  prerequisites_met: string;
+  prerequisites_fraction: number;
   stage2_cf_score: number;
   stage3_fm_score: number;
   contributing_features: Record<string, unknown>;
@@ -27,6 +30,7 @@ const score = (value: unknown) =>
 
 export default function RecommendationsPage() {
   const queryClient = useQueryClient();
+  const { track } = useTracking();
   const [explanations, setExplanations] = useState<Record<string, string>>({});
   const [explaining, setExplaining] = useState<string | null>(null);
   const [explainError, setExplainError] = useState<Record<string, string>>({});
@@ -37,10 +41,12 @@ export default function RecommendationsPage() {
   });
 
   const decide = useMutation({
-    mutationFn: ({ id, action }: { id: string; action: "accept" | "reject" }) =>
-      action === "accept"
+    mutationFn: ({ id, action }: { id: string; action: "accept" | "reject" }) => {
+      track("recommendation_decision", { metadata: { action, recommendation_id: id } });
+      return action === "accept"
         ? endpoints.recommendations.accept(id)
-        : endpoints.recommendations.reject(id),
+        : endpoints.recommendations.reject(id);
+    },
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["recommendations"] }),
   });
 
@@ -122,13 +128,17 @@ export default function RecommendationsPage() {
                 <div className="mt-2 flex flex-wrap gap-4 text-xs text-slate-600">
                   <span>
                     Stage 1 KG:{" "}
-                    {rec.stage1_eligibility ? (
+                    {rec.stage1_eligible ? (
                       <span className="font-medium text-green-700">eligible</span>
                     ) : (
                       <span className="font-medium text-red-600">below gate</span>
                     )}
                   </span>
-                  <span>Prereqs met: {(rec.prerequisites_met * 100).toFixed(0)}%</span>
+                  <span>
+                    Prereqs met: {rec.prerequisites_met}
+                    {typeof rec.prerequisites_fraction === "number" &&
+                      ` (${(rec.prerequisites_fraction * 100).toFixed(0)}%)`}
+                  </span>
                   <span>Stage 2 CF: {score(rec.stage2_cf_score)}</span>
                   <span>Stage 3 FM: {score(rec.stage3_fm_score)}</span>
                 </div>

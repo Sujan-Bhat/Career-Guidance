@@ -37,7 +37,7 @@ class BehaviourSession(Document):
 class BehaviourEvent(Document):
     """Raw interaction event (page_view, resource_open, resource_close,
     resource_switch, idle_start, idle_end, task_start, task_complete,
-    quiz_attempt, heartbeat)."""
+    quiz_attempt, heartbeat, recommendation_decision)."""
 
     session = fields.StringField(required=True)
     student = fields.StringField(required=True)

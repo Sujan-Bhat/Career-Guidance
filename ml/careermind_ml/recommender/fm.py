@@ -50,16 +50,18 @@ def _split_by_student(interactions, students_agg, holdout=0.2, seed=0):
     return train_inter, test_inter, train_agg, test_agg
 
 
-def train_fm(data: dict, config: dict | None = None) -> dict:
-    """Train the FM on implicit feedback; returns metrics and saves an artifact.
+def fit_fm(
+    interactions: list[dict],
+    students_agg: list[dict],
+    spec: "FeatureSpec",
+    config: dict | None = None,
+) -> tuple[FactorizationMachine, dict]:
+    """Fit the FM on implicit feedback IN MEMORY (no artifact I/O).
 
-    Args:
-        data: output of features.load_fm_training_data (interactions,
-            students_agg, item_vocab).
-        config: fm.yaml-style dict (embedding_dim, learning_rate, epochs,
-            batch_size, negatives_per_positive).
+    Shared by `train_fm` (artifact pipeline) and the benchmark's leakage-free
+    train-split retrains. Returns (eval-mode model, {train_rows}).
     """
-    from .features import build_spec, make_dataset
+    from .features import make_dataset
 
     config = config or {}
     k = int(config.get("embedding_dim", 16))
@@ -72,22 +74,12 @@ def train_fm(data: dict, config: dict | None = None) -> dict:
     torch.manual_seed(seed)
     np.random.seed(seed)
 
-    train_inter, test_inter, train_agg, _ = _split_by_student(
-        data["interactions"], data["students_agg"], holdout=0.2, seed=seed
-    )
-    spec = build_spec(data["students_agg"], data["item_vocab"])
-    rng = np.random.default_rng(seed)
-
-    x_train, y_train = make_dataset(train_inter, train_agg, spec, negatives, rng)
-    x_test, y_test = make_dataset(
-        test_inter,
-        data["students_agg"],  # spec defaults are population-wide on purpose
-        spec,
-        negatives,
-        rng,
-    )
-
     model = FactorizationMachine(spec.dim, k=k)
+    if not interactions:
+        return model, {"train_rows": 0}
+
+    rng = np.random.default_rng(seed)
+    x_train, y_train = make_dataset(interactions, students_agg, spec, negatives, rng)
     optimiser = torch.optim.Adam(model.parameters(), lr=lr)
     x_train_t = torch.as_tensor(x_train)
     y_train_t = torch.as_tensor(y_train)
@@ -108,14 +100,48 @@ def train_fm(data: dict, config: dict | None = None) -> dict:
         if epoch == 0 or (epoch + 1) % 10 == 0:
             print(f"  epoch {epoch + 1}/{epochs} train_loss={total_loss / n:.4f}")
 
-    # held-out AUC (Phase 9 does the full benchmark suite)
     model.eval()
-    with torch.no_grad():
-        scores = model(torch.as_tensor(x_test)).numpy()
-    metrics = {"train_rows": int(n), "test_rows": int(len(x_test))}
+    return model, {"train_rows": int(n)}
+
+
+def train_fm(data: dict, config: dict | None = None) -> dict:
+    """Train the FM on implicit feedback; returns metrics and saves an artifact.
+
+    Args:
+        data: output of features.load_fm_training_data (interactions,
+            students_agg, item_vocab).
+        config: fm.yaml-style dict (embedding_dim, learning_rate, epochs,
+            batch_size, negatives_per_positive).
+    """
+    from .features import build_spec, make_dataset
+
+    config = config or {}
+    seed = int(config.get("seed", 0))
+    negatives = float(config.get("negatives_per_positive", 2.0))
+
+    train_inter, test_inter, train_agg, _ = _split_by_student(
+        data["interactions"], data["students_agg"], holdout=0.2, seed=seed
+    )
+    spec = build_spec(data["students_agg"], data["item_vocab"])
+    rng = np.random.default_rng(seed)
+
+    model, fit_metrics = fit_fm(train_inter, train_agg, spec, config)
+
+    x_test, y_test = make_dataset(
+        test_inter,
+        data["students_agg"],  # spec defaults are population-wide on purpose
+        spec,
+        negatives,
+        rng,
+    )
+
+    # held-out AUC (Phase 9 does the full benchmark suite)
+    metrics = {**fit_metrics, "test_rows": int(len(x_test))}
     if len(np.unique(y_test)) > 1:
         from sklearn.metrics import roc_auc_score
 
+        with torch.no_grad():
+            scores = model(torch.as_tensor(x_test)).numpy()
         metrics["test_auc"] = float(roc_auc_score(y_test, scores))
     else:
         metrics["test_auc"] = None
@@ -130,7 +156,7 @@ def train_fm(data: dict, config: dict | None = None) -> dict:
 
 
 def save_artifact(model: FactorizationMachine, spec, config: dict) -> None:
-    """Persist Q-network weights + feature spec (+ item vocab) for serving."""
+    """Persist FM weights + feature spec (+ item vocab) for serving."""
     ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
     torch.save({"state_dict": model.state_dict(), "n_features": spec.dim, "k": model.v.shape[1]}, ARTIFACTS_DIR / "fm.pt")
     with open(ARTIFACTS_DIR / "fm_spec.json", "w") as fh:

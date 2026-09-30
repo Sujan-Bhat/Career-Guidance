@@ -113,7 +113,14 @@ def train_ensemble(data: dict, config: dict) -> dict:
     model = build_ensemble(config)
     model.fit(full_x, y)
 
-    save_artifact(model, defaults, list(model.classes_), config, metrics)
+    save_artifact(
+        model,
+        defaults,
+        list(model.classes_),
+        config,
+        metrics,
+        columns=list(full_x.columns),
+    )
 
     wp = metrics["with_preferences"]
     print(
@@ -131,16 +138,33 @@ def train_ensemble(data: dict, config: dict) -> dict:
     return metrics
 
 
-def save_artifact(model, population_defaults: dict, classes: list[str], config: dict, metrics: dict) -> None:
-    """Persist the fitted stack + population defaults + class order."""
+def save_artifact(
+    model,
+    population_defaults: dict,
+    classes: list[str],
+    config: dict,
+    metrics: dict,
+    columns=None,
+) -> None:
+    """Persist the fitted stack + population defaults + class order.
+
+    `columns` must be the feature names the model was FIT on — the served
+    model is always refit on the preference-augmented frame, so deriving the
+    list from `config["include_preferences"]` would write a column set that
+    mismatches the estimator at load time. Falls back to the fitted model's
+    own `feature_names_in_`, then to the config, for direct callers."""
     import joblib
 
     ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
-    columns = ALL_COLUMNS if bool(config.get("include_preferences", True)) else BASE_COLUMNS
+    if columns is None:
+        columns = list(getattr(model, "feature_names_in_", []) or [])
+    if not columns:
+        columns = ALL_COLUMNS if bool(config.get("include_preferences", True)) else BASE_COLUMNS
+    columns = list(columns)
     joblib.dump(
         {
             "model": model,
-            "columns": list(columns),
+            "columns": columns,
             "population_defaults": population_defaults,
             "classes": classes,
             "version": MODEL_VERSION,
@@ -151,7 +175,7 @@ def save_artifact(model, population_defaults: dict, classes: list[str], config: 
         json.dump(
             {
                 "version": MODEL_VERSION,
-                "columns": list(columns),
+                "columns": columns,
                 "classes": classes,
                 "metrics": {k: v for k, v in metrics.items() if k != "artifact"},
                 "config": config or {},

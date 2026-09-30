@@ -68,7 +68,8 @@ def _student_state(profile) -> list[float]:
     from careermind_ml.recommender.features import GRADE_SUBJECTS
 
     fes_values = [s.fes for s in FESScore.objects(student=profile.student_id).order_by("computed_at")][-5:]
-    fes_part = list(fes_values) + [0.0] * (5 - len(fes_values))
+    fes_part = [v if v is not None else 0.0 for v in fes_values]
+    fes_part += [0.0] * (5 - len(fes_part))
 
     grades = {r.subject: r.grade for r in profile.academic_records}
     grade_part = [(grades.get(subject) or 70.0) / 100.0 for subject in GRADE_SUBJECTS]
@@ -78,6 +79,7 @@ def _student_state(profile) -> list[float]:
 
     # active pathway: latest accepted (else latest any) recommendation
     pathway_ids = sorted(p.external_id for p in CareerPathway.objects.only("external_id"))
+    max_pathway_index = max(len(pathway_ids) - 1, 1)
     recent = list(Recommendation.objects(student=profile.student_id).order_by("-created_at")[:10])
     active = next((r for r in recent if r.decision == "accepted"), recent[0] if recent else None)
     index = pathway_ids.index(active.item_id) if active and active.item_id in pathway_ids else 0
@@ -85,7 +87,7 @@ def _student_state(profile) -> list[float]:
     accepted = sum(1 for r in recent if r.decision == "accepted")
     acceptance = (accepted / len(recent)) if recent else 0.5
 
-    state = fes_part + grade_part + skill_part + [index / 17.0, acceptance]
+    state = fes_part + grade_part + skill_part + [index / max_pathway_index, acceptance]
     if len(state) != 17:
         raise ValueError(f"state must be 17-dim, got {len(state)}")
     return [float(v) for v in state]

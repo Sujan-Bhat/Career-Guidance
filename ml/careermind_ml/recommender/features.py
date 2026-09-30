@@ -117,10 +117,14 @@ def make_dataset(
         if negatives_per_positive > int(negatives_per_positive) and rng.random() < negatives_per_positive - n_negatives:
             n_negatives += 1
         for _ in range(n_negatives):
-            while True:
-                candidate = spec.item_vocab[rng.integers(0, len(spec.item_vocab))]
-                if candidate not in engaged.get(interaction["student"], set()):
+            candidate = None
+            for _attempt in range(64):  # bounded: a student engaged in every item has no negatives
+                trial = spec.item_vocab[int(rng.integers(0, len(spec.item_vocab)))]
+                if trial not in engaged.get(interaction["student"], set()):
+                    candidate = trial
                     break
+            if candidate is None:
+                continue
             features.append(vectorize(agg, candidate, spec))
             labels.append(0.0)
 
@@ -135,8 +139,8 @@ def load_fm_training_data(uri: str = "mongodb://localhost:27017", db_name: str =
 
     from pymongo import MongoClient
 
-    client = MongoClient(os.getenv("MONGO_URI", uri))
-    db = client[os.getenv("MONGO_DB_NAME", db_name)]
+    client = MongoClient(uri or os.getenv("MONGO_URI", "mongodb://localhost:27017"))
+    db = client[db_name or os.getenv("MONGO_DB_NAME", "careermind")]
 
     interactions = list(db.interactions.find({}, {"_id": 0}))
     profiles = list(db.profiles.find({}, {"_id": 0}))

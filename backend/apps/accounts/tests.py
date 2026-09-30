@@ -74,3 +74,48 @@ def test_refresh_flow(api):
 def test_short_password_rejected(api):
     payload = {**REGISTER, "email": "short@test.local", "password": "short"}
     assert api.post("/api/v1/accounts/register", payload, format="json").status_code == 400
+
+
+def test_duplicate_email_race_returns_400(api, monkeypatch):
+    """Two concurrent registers can both pass the pre-insert duplicate check;
+    the unique index then raises NotUniqueError, which must map to the same
+    400 the pre-check produces instead of an unhandled 500."""
+    from mongoengine import NotUniqueError
+
+    def boom(self, *args, **kwargs):
+        raise NotUniqueError("email")
+
+    monkeypatch.setattr(StudentProfile, "save", boom)
+    response = api.post("/api/v1/accounts/register", REGISTER, format="json")
+    assert response.status_code == 400
+    assert response.data["detail"] == "Email already registered"
+
+
+def test_database_errors_are_not_masked_as_auth_failures(monkeypatch):
+    """`except (DoesNotExist, Exception)` used to swallow Mongo outages and
+    relabel them "Profile not found" (401). Only DoesNotExist is an auth
+    failure; anything else must propagate."""
+    from apps.accounts.auth import CareermindJWTAuthentication, mint_tokens
+
+    token = mint_tokens("64b000000000000000000000")["access"]
+
+    class _BrokenManager:
+        def get(self, **kwargs):
+            raise RuntimeError("mongo is down")
+
+    monkeypatch.setattr(StudentProfile, "objects", _BrokenManager())
+
+    class _Request:
+        META = {"HTTP_AUTHORIZATION": f"Bearer {token}"}
+
+    with pytest.raises(RuntimeError, match="mongo is down"):
+        CareermindJWTAuthentication().authenticate(_Request())
+
+
+def test_unknown_subject_is_still_an_auth_failure(api):
+    from apps.accounts.auth import mint_tokens
+
+    token = mint_tokens("64b0000000000000000000ff")["access"]
+    api.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+    response = api.get("/api/v1/accounts/me")
+    assert response.status_code == 401

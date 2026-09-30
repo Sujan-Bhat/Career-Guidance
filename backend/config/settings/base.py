@@ -4,6 +4,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import mongoengine
+from celery.schedules import crontab
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
@@ -87,6 +88,17 @@ CORS_ALLOWED_ORIGINS = [os.getenv("FRONTEND_URL", "http://localhost:3000")]
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/1")
 CELERY_TASK_ALWAYS_EAGER = os.getenv("CELERY_TASK_ALWAYS_EAGER", "0") == "1"
+
+# Nightly Eq. 2 weight recalibration (non-destructive; see
+# apps.fes.tasks.recompute_all_weights). Requires a `celery beat` scheduler —
+# `celery -A config beat`, provided by the `beat` service in
+# infra/docker-compose.yml.
+CELERY_BEAT_SCHEDULE = {
+    "fes.recompute-all-weights": {
+        "task": "fes.recompute_all_weights",
+        "schedule": crontab(hour=3, minute=0),
+    },
+}
 
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"

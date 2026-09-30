@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { endpoints, isLoggedIn } from "@/lib/api/client";
+import { useTracking } from "@/lib/tracking/TrackingProvider";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 
@@ -33,6 +34,7 @@ const COMMON_SKILLS = [
 
 export default function QuizPage() {
   const loggedIn = isLoggedIn();
+  const { track } = useTracking();
   const [active, setActive] = useState<ActiveQuiz | null>(null);
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [results, setResults] = useState<Record<number, boolean> | null>(null);
@@ -54,6 +56,7 @@ export default function QuizPage() {
     setError(null);
     try {
       const { data: quiz } = await endpoints.courses.quiz(quizId);
+      track("resource_open", { resource_id: quizId, metadata: { resource_type: "quiz" } });
       setActive({ ...quiz, questions: quiz.questions ?? [] });
       setAnswers({});
       setResults(null);
@@ -98,6 +101,7 @@ export default function QuizPage() {
   };
 
   const postAttempt = async (quizId: string, itemId: string, correct: boolean) => {
+    track("quiz_attempt", { resource_id: quizId, metadata: { item_id: itemId, correct } });
     try {
       await endpoints.courses.quizAttempt(quizId, { item_id: itemId, correct });
     } catch (err) {
@@ -115,6 +119,7 @@ export default function QuizPage() {
     if (!active) return;
     setSubmitting(true);
     setError(null);
+    track("task_start", { metadata: { quiz_id: active.quiz_id } });
     const outcome: Record<number, boolean> = {};
     try {
       for (let i = 0; i < active.questions.length; i += 1) {
@@ -135,6 +140,7 @@ export default function QuizPage() {
       );
       setResults(outcome); // still show local scoring for what got through
     } finally {
+      track("task_complete", { metadata: { quiz_id: active.quiz_id } });
       setSubmitting(false);
     }
   };

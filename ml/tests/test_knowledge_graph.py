@@ -63,3 +63,21 @@ def test_partial_eligibility_still_passes_threshold(graph):
     candidates = {c["id"]: c for c in generate_candidates(partial, graph)}
     assert "c03" in candidates
     assert candidates["c03"]["eligibility"] == pytest.approx(0.75)
+
+
+def test_career_with_no_prerequisites_is_vacuously_eligible():
+    """An empty prerequisite list must not divide by zero: eligibility is 1.0
+    (vacuously met) and the reported fraction has to agree with it."""
+    import networkx as nx
+
+    graph = nx.DiGraph()
+    graph.add_node("open_role", kind="career", label="Open Role", category="software",
+                   description="", prerequisites=[], typical_courses=[])
+    graph.add_node("some_skill", kind="skill", label="Some Skill")
+
+    assert prerequisite_eligibility({}, []) == 1.0
+    candidates = generate_candidates({}, graph, threshold=DEFAULT_ELIGIBILITY_THRESHOLD)
+    assert len(candidates) == 1
+    assert candidates[0]["eligibility"] == 1.0
+    assert candidates[0]["prerequisites_fraction"] == 1.0
+    assert candidates[0]["prerequisites_met"] == "0/0"

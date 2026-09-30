@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 
 from celery import shared_task
 
-from careermind_ml.fes.pipeline import load_config
+from careermind_ml.fes.pipeline import DEFAULT_CONFIG_PATH, load_config
 from careermind_ml.fes.submetrics import (
     distraction_free_engagement_time,
     learning_resource_depth_score,
@@ -24,7 +24,11 @@ from ..collector.models import BehaviourSession
 from ..collector.services import recompute_session_aggregates
 from .models import FESScore, FESWeights
 
-CONFIG = load_config(None)
+# Read ml/configs/fes.yaml so the live session-end task and the batch pipeline
+# (`make train-fes`) share one source of truth for sci_window_days, the LRDS
+# dwell thresholds and the Eq. 2 calibration gates. load_config falls back to
+# code defaults when the file is absent.
+CONFIG = load_config(DEFAULT_CONFIG_PATH)
 
 
 def _weights_for(student_id: str) -> dict:
@@ -96,8 +100,14 @@ def compute_session_fes(session_id: str) -> dict:
 
 @shared_task(name="fes.recompute_all_weights")
 def recompute_all_weights() -> dict:
-    """Nightly batch: re-run per-student Eq. 2 calibration (Phase 10 wires the
-    beat schedule). Runs the ml package pipeline."""
-    from careermind_ml.fes.pipeline import run_pipeline
+    """Nightly Eq. 2 recalibration (scheduled via CELERY_BEAT_SCHEDULE in
+    config/settings/base.py; the compose `beat` service runs the scheduler).
 
-    return run_pipeline()
+    Uses the NON-DESTRUCTIVE recalibrate_weights path: weight rows are
+    upserted and existing fes_history rows are refreshed in place, so rows
+    written concurrently by compute_session_fes are never wiped. Run
+    `make train-fes` (run_pipeline) when a full collection rewrite is wanted.
+    """
+    from careermind_ml.fes.pipeline import recalibrate_weights
+
+    return recalibrate_weights(config_path=DEFAULT_CONFIG_PATH)

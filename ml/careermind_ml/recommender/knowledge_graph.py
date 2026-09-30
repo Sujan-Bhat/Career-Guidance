@@ -77,15 +77,20 @@ def generate_candidates(
     ordered by eligibility (desc) then career id."""
     candidates = []
     for career in get_careers(graph):
-        eligibility = prerequisite_eligibility(student_skills, career["prerequisites"])
+        prereqs = career["prerequisites"]
+        eligibility = prerequisite_eligibility(student_skills, prereqs)
         if eligibility >= threshold:
+            met = sum(1 for p in prereqs if student_skills.get(p["skill"], 0) >= p["min_level"])
+            # empty prereqs are vacuously met (matches prerequisite_eligibility)
+            fraction = round(met / len(prereqs), 4) if prereqs else 1.0
             candidates.append(
                 {
                     "id": career["id"],
                     "name": career["label"],
                     "category": career["category"],
                     "eligibility": round(eligibility, 4),
-                    "prerequisites_met": f"{eligibility * len(career['prerequisites']):.0f}/{len(career['prerequisites'])}",
+                    "prerequisites_met": f"{met}/{len(prereqs)}",
+                    "prerequisites_fraction": fraction,
                 }
             )
     candidates.sort(key=lambda c: (-c["eligibility"], c["id"]))

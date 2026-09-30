@@ -160,3 +160,39 @@ def test_explain_provider_failure_returns_502(recommendation_for_user, registere
     client, _ = registered
     response = client.get(f"/api/v1/recommendations/{recommendation_for_user}/explain")
     assert response.status_code == 502
+
+
+@pytest.mark.usefixtures("seeded_population")
+def test_accept_writes_an_interactions_document(registered):
+    """`interactions` is what stage-2 CF and the ensemble's exp_* features
+    read; live users must contribute to it on accept, not only the seeder."""
+    client, user = registered
+    recs = client.get("/api/v1/recommendations/").data["recommendations"]
+    accepted, rejected = recs[0], recs[1]
+
+    assert client.post(f"/api/v1/recommendations/{accepted['recommendation_id']}/accept").status_code == 200
+    assert client.post(f"/api/v1/recommendations/{rejected['recommendation_id']}/reject").status_code == 200
+
+    db = connection.get_db("default")
+    row = db.interactions.find_one({"student": user["student_id"], "item_id": accepted["id"]})
+    assert row is not None, "accepting a recommendation must record an interaction"
+    assert row["decision"] == "accepted"
+    assert row["created_at"] is not None
+
+    # rejections are not positive feedback and must not be written
+    assert db.interactions.find_one({"student": user["student_id"], "item_id": rejected["id"]}) is None
+
+
+@pytest.mark.usefixtures("seeded_population")
+def test_accepting_twice_upserts_rather_than_duplicates(registered):
+    client, user = registered
+    rec = client.get("/api/v1/recommendations/").data["recommendations"][0]
+    client.post(f"/api/v1/recommendations/{rec['recommendation_id']}/accept")
+
+    # force a second accept through the same code path (the view's 409 guard
+    # normally blocks it) to prove the write is idempotent
+    views._record_interaction(user["student_id"], rec["id"])
+    views._record_interaction(user["student_id"], rec["id"])
+
+    db = connection.get_db("default")
+    assert db.interactions.count_documents({"student": user["student_id"], "item_id": rec["id"]}) == 1

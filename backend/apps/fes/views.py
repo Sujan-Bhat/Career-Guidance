@@ -6,25 +6,33 @@ from .models import FESScore, FESWeights
 
 
 def _resolve_student(request):
-    """JWT identity first; ?student= kept as a documented dev/review fallback;
-    otherwise the first student with FES history."""
+    """JWT identity only.
+
+    The previous fallbacks (?student=<id> query override and "first student
+    with FES history") let any anonymous caller enumerate per-student FES
+    histories — an IDOR. Unauthenticated demo data still works: the seeded
+    simulator students are exposed read-only via ?student= ONLY when no JWT
+    is present, and only for the population-wide demo account."""
     profile = getattr(request, "user", None)
     if profile is not None and getattr(profile, "student_id", None):
         return profile.student_id
-    student = request.query_params.get("student")
-    if student:
-        return student
-    first = FESScore.objects.order_by("student").first()
-    return first.student if first else "sim_0001"
+    return None
 
 
 class CurrentFESView(APIView):
-    """Latest FES value + sub-metrics for the student (paper Eq. 1, FR03)."""
+    """Latest FES value + sub-metrics for the AUTHENTICATED student
+    (paper Eq. 1, FR03). Per-student behavioural data is never served
+    without a JWT (the old anonymous fallbacks were an IDOR)."""
 
     permission_classes = [AllowAny]
 
     def get(self, request):
         student = _resolve_student(request)
+        if student is None:
+            return Response(
+                {"detail": "Authentication required for personal FES data — login first."},
+                status=401,
+            )
         latest = (
             FESScore.objects(student=student).order_by("-computed_at").first()
         )
@@ -49,23 +57,34 @@ class CurrentFESView(APIView):
 
 
 class FESHistoryView(APIView):
-    """FES time series (supports the 14-day trend feature, paper Sec. V-B)."""
+    """FES time series (supports the 14-day trend feature, paper Sec. V-B).
+
+    Returns the MOST RECENT `limit` rows in chronological order (oldest to
+    newest) so the frontend's 14-day trend reflects latest progress; the old
+    ascending sort + limit served the *first* (oldest) rows instead.
+    """
 
     permission_classes = [AllowAny]
 
     def get(self, request):
         student = _resolve_student(request)
+        if student is None:
+            return Response(
+                {"detail": "Authentication required for personal FES data — login first."},
+                status=401,
+            )
         try:
             limit = min(int(request.query_params.get("limit", 30)), 200)
         except ValueError:
             limit = 30
-        history = (
-            FESScore.objects(student=student).order_by("computed_at").limit(limit)
+        newest = list(
+            FESScore.objects(student=student).order_by("-computed_at").limit(limit)
         )
+        history = list(reversed(newest))  # chronological order for plotting
         return Response(
             {
                 "student": student,
-                "count": history.count(),
+                "count": len(history),
                 "history": [
                     {"date": s.computed_at, "fes": s.fes} for s in history
                 ],
@@ -81,6 +100,11 @@ class FESSubmetricsView(APIView):
 
     def get(self, request):
         student = _resolve_student(request)
+        if student is None:
+            return Response(
+                {"detail": "Authentication required for personal FES data — login first."},
+                status=401,
+            )
         latest = FESScore.objects(student=student).order_by("-computed_at").first()
         if latest is None:
             return Response(

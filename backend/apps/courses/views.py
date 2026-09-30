@@ -16,10 +16,12 @@ class CourseListView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        courses = Course.objects.order_by("code").limit(500)
+        # materialise first: QuerySet.count() ignores .limit() by default, so
+        # it would report the total catalogue size while only 500 are returned
+        courses = list(Course.objects.order_by("code").limit(500))
         return Response(
             {
-                "count": courses.count(),
+                "count": len(courses),
                 "courses": [
                     {
                         "code": course.code,

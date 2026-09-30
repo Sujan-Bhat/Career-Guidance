@@ -177,8 +177,8 @@ def load_ensemble_training_data(uri: str = "mongodb://localhost:27017", db_name:
 
     from pymongo import MongoClient
 
-    client = MongoClient(os.getenv("MONGO_URI", uri))
-    db = client[os.getenv("MONGO_DB_NAME", db_name)]
+    client = MongoClient(uri or os.getenv("MONGO_URI", "mongodb://localhost:27017"))
+    db = client[db_name or os.getenv("MONGO_DB_NAME", "careermind")]
 
     fes_by_student: dict[str, list[tuple]] = {}
     for row in db.fes_history.find({}, {"student": 1, "fes": 1, "computed_at": 1}).sort("computed_at", 1):

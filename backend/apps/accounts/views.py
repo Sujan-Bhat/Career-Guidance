@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from mongoengine import NotUniqueError
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -39,15 +40,19 @@ class RegisterView(APIView):
         data = serializer.validated_data
         if StudentProfile.objects(email=data["email"]).first():
             return Response({"detail": "Email already registered"}, status=400)
-        profile = StudentProfile(
-            email=data["email"],
-            full_name=data["full_name"],
-            password_hash=hash_password(data["password"]),
-            programme=data.get("programme") or "",
-            year_of_study=data.get("year_of_study"),
-            source="careermind",
-            created_at=datetime.utcnow(),
-        ).save()
+        try:
+            profile = StudentProfile(
+                email=data["email"],
+                full_name=data["full_name"],
+                password_hash=hash_password(data["password"]),
+                programme=data.get("programme") or "",
+                year_of_study=data.get("year_of_study"),
+                source="careermind",
+                created_at=datetime.utcnow(),
+            ).save()
+        except NotUniqueError:
+            # unique(email) race: two concurrent registers pass the check above
+            return Response({"detail": "Email already registered"}, status=400)
         return _auth_response(profile, status.HTTP_201_CREATED)
 
 

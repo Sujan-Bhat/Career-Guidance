@@ -149,10 +149,16 @@ pip install -e "llm_gateway[dev]"  # Part A — provider SDKs optional
   14-day trend + sub-metrics), career prediction distribution, recommendations
   (accept/reject + LLM "Why this?" explanations), skill quizzes (seeded demos +
   AI generation), and the guidance chat (friendly degradation without
-  `LLM_API_KEY`).
+  `LLM_API_KEY`). The behavioural tracking SDK is wired into every page
+  (session lifecycle, page dwell, quiz attempts, recommendation decisions),
+  so live sessions carry real events into the FES pipeline.
 - **Backend:** every endpoint implemented (no 501 stubs remain) — FES,
   recommendations, career prediction, RL feedback, quiz/courses, collector, and
-  the LLM proxy; JWT required where noted. LLM endpoints return 503 until
+  the LLM proxy; JWT required where noted (FES endpoints serve only the
+  caller's own history — the cross-student `?student=` shortcut is gone).
+  `POST /api/v1/collector/sessions/{id}/end` accepts a final event batch with
+  the session close so nothing tracked on the last page is lost. LLM endpoints
+  return 503 until
   `LLM_API_KEY` is set (see `.env.example`; the backend loads the repo-root
   `.env` automatically).
 - **MongoDB** (after the data-foundation steps): 18 career pathways + 20 skills,
@@ -189,10 +195,10 @@ Four studies (paper Sec. VIII), results also written to
 `evaluation/results/pilot_results.json`:
 
 1. **FES predictive validity** — Pearson r of FES/sub-metrics vs mean grade
-   (TCR strongest ≈ 0.64; per-student Eq. 2 weights vs the 3-student
-   population fallback, whose n=3 group correlations are illustrative only).
+   (TCR strongest ≈ 0.64; per-student Eq. 2 weights vs the 2-student
+   population fallback, whose n=2 group correlations are undefined).
 2. **Recommender benchmark** — leave-one-out over interactions: the 3-stage
-   cascade reaches Hit@10 ≈ 0.84 alongside single-technique baselines
+   cascade reaches Hit@10 ≈ 0.82 alongside single-technique baselines
    (fm_only ≈ 0.86, cf_only ≈ 0.79, popularity ≈ 0.72, kg_only ≈ 0.55); the
    stage-1 gate passes on average 16.2 of 18 pathways at the paper's 0.6
    threshold.
@@ -225,7 +231,7 @@ replay buffer, target-network sync every 100 steps, Eq. 3 reward weights) live i
 2. **FES engine** — five sub-metrics, Eq. 2 per-student weight calibration (gates + population fallback), batch pipeline, FES read APIs
 3. **Backend core** — JWT auth (register/login/me/refresh), behavioural collector (session lifecycle + event ingestion), session-end FES via Celery, quiz attempts (FR04), frontend login + JWT'd tracking
 4. **Recommender** — 3-stage cascade live: KG filtering (≥60%), FES-weighted CF re-ranking, trained FM (held-out AUC 0.84) with accept/reject logging; population-profile cold start
-5. **Career prediction ensemble** — stacking RF+GBT+MLP → LR meta (held-out acc 0.93 incl. stated preferences; no-preference ablation 0.38), occlusion feature attribution, `GET /careers/predictions` + live `/prediction` page
+5. **Career prediction ensemble** — stacking RF+GBT+MLP → LR meta (held-out acc 0.95 incl. stated preferences; no-preference ablation 0.35), occlusion feature attribution, `GET /careers/predictions` + live `/prediction` page
 6. **RL adaptive feedback** — gymnasium simulator environment with the paper's 8 interventions, Eq. 3 reward (α·dFES + β·dSkill + γ·E + δ·CA), DQN pre-training (1000 episodes / 60k steps, reward +6.5 → +8.9), artifact serving, and `GET /rl/status` + `POST /rl/action` transition-logging API
 7. **LLM gateway (Part A)** — OpenAI/Anthropic/Gemini adapters, agency-preserving grounded guidance chat (`POST /llm/chat`, per-student history window), LLM quiz generation (`POST /llm/quiz/generate`), cached recommendation explanations (`GET /recommendations/<id>/explain`), live `/chat` page; 503 without `LLM_API_KEY`, 502 on provider failure
 8. **Full frontend** — live recommendations page (cascade provenance, accept/reject, "Why this?" explanations), quiz page (seeded demos + AI generation, per-item attempt recording into QAP), dashboard 14-day FES trend chart, live `/chat` and `/prediction` pages

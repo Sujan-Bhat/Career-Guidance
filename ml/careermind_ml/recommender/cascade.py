@@ -87,7 +87,8 @@ class CascadeRecommender:
             skills = {}
 
         # Stage 1: knowledge-graph eligibility (>= 60% prerequisites)
-        candidates = generate_candidates(skills, self.graph, threshold=self.config.get("stage1_eligibility_threshold", 0.60))
+        threshold = self.config.get("stage1_eligibility_threshold", 0.60)
+        candidates = generate_candidates(skills, self.graph, threshold=threshold)
         if not candidates:
             return {"results": [], "cold_start": cold_start}
 
@@ -106,7 +107,9 @@ class CascadeRecommender:
                     "name": candidate["name"],
                     "category": candidate["category"],
                     "stage1_eligibility": candidate["eligibility"],
+                    "stage1_eligible": bool(candidate["eligibility"] >= threshold),
                     "prerequisites_met": candidate["prerequisites_met"],
+                    "prerequisites_fraction": candidate["prerequisites_fraction"],
                     "stage2_cf_score": round(candidate["stage2_cf_score"], 4),
                     "stage3_fm_score": round(score, 4),
                     "contributing_features": {

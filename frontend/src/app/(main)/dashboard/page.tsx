@@ -18,11 +18,14 @@ export default function DashboardPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["fes", "current"],
     queryFn: () => endpoints.fes.current(),
+    enabled: loggedIn,
   });
   const { data: historyData } = useQuery({
     queryKey: ["fes", "history"],
     queryFn: () => endpoints.fes.history(),
+    enabled: loggedIn,
   });
+  const status = (error as { response?: { status?: number } } | null)?.response?.status;
 
   const fes: number | null = data && !data.data?.detail ? data.data.fes : null;
   const submetrics: Record<string, number> | null =
@@ -87,7 +90,9 @@ export default function DashboardPage() {
       </div>
       {error && (
         <p className="text-sm text-red-600">
-          FES unavailable — complete a tracked session first (register/login, browse, close the tab).
+          {status === 401
+            ? "Login to see your personal FES and sub-metrics."
+            : "FES unavailable — complete a tracked session first (register/login, browse, close the tab)."}
         </p>
       )}
       <Card title="Sub-metric breakdown (paper Sec. V-A)">

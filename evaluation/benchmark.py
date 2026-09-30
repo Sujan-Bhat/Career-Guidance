@@ -39,7 +39,8 @@ def _student_agg(profile: dict, fes_series: list) -> dict:
 def build_context(uri: str | None = None, db_name: str | None = None) -> dict:
     """Load Mongo once: train/holdout split, per-student inputs, cascade,
     and the four baselines — all trained/built on the TRAIN split only
-    (the FM artifact itself is the shared pre-trained stage-3 model)."""
+    (the stage-3 FM is retrained here; the shared fm.pt artifact saw the
+    holdouts during its own training and would leak them into scoring)."""
     uri = uri or os.getenv("MONGO_URI", "mongodb://localhost:27017")
     db_name = db_name or os.getenv("MONGO_DB_NAME", "careermind")
     db = MongoClient(uri)[db_name]
@@ -72,10 +73,12 @@ def build_context(uri: str | None = None, db_name: str | None = None) -> dict:
         fes_by_student[row["student"]].append((row["computed_at"], row["fes"]))
 
     skills_by_student: dict[str, dict] = {}
+    all_aggs: list[dict] = []
     students = []
     for profile in profiles:
         student = profile.get("external_id") or str(profile.get("_id", ""))
         agg = _student_agg(profile, fes_by_student.get(student, []))
+        all_aggs.append(agg)
         skills = {
             s["skill"]: max(1, min(5, int(s["score"] // 20) + 1))
             for s in profile.get("skill_assessments") or []
@@ -101,13 +104,28 @@ def build_context(uri: str | None = None, db_name: str | None = None) -> dict:
         "skills_by_student": skills_by_student,
     }
     cascade = CascadeRecommender.from_data(data)
+
+    # Leakage fix: from_data loads the pre-trained fm.pt artifact, which was
+    # trained on ALL interactions — including the holdouts this benchmark
+    # scores. Retrain the FM on the train split only (defaults mirror
+    # ml/configs/fm.yaml) and swap it into the cascade and the fm_only
+    # baseline so every technique is graded on unseen items.
+    from careermind_ml.recommender.features import build_spec
+    from careermind_ml.recommender.fm import fit_fm
+
+    fm_item_vocab = sorted({ix["item_id"] for ix in train_interactions})
+    fm_spec = build_spec(all_aggs, fm_item_vocab)
+    fm_model, _fit = fit_fm(train_interactions, all_aggs, fm_spec)
+    cascade.fm_model = fm_model
+    cascade.fm_spec = fm_spec
+
     graph = cascade.graph
     candidates = sorted(c["id"] for c in get_careers(graph))
 
     baselines = {
         "kg_only": SingleTechniqueBaseline("kg_only", graph=graph),
         "cf_only": SingleTechniqueBaseline("cf_only", cooc=cascade.cooc),
-        "fm_only": SingleTechniqueBaseline("fm_only", fm_model=cascade.fm_model, fm_spec=cascade.fm_spec),
+        "fm_only": SingleTechniqueBaseline("fm_only", fm_model=fm_model, fm_spec=fm_spec),
         "popularity": SingleTechniqueBaseline(
             "popularity",
             interactions=train_interactions,

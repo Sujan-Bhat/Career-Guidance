@@ -82,13 +82,13 @@ def calibrate_student_weights(pairs: list[dict], config: dict | None = None) -> 
     """
     cfg = {**DEFAULT_CONFIG, **(config or {})}
 
-    completed = [p for p in pairs if p.get("outcome") is not None]
-    if len(completed) < cfg["min_sessions"]:
+    graded = [p for p in pairs if p.get("outcome") is not None]
+    if len(pairs) < cfg["min_sessions"]:
         return None
-    if sum(1 for p in completed if p.get("outcome") is not None) < cfg["min_graded_outcomes"]:
+    if len(graded) < cfg["min_graded_outcomes"]:
         return None
 
-    correlations = compute_submetric_correlations(completed, cfg)
+    correlations = compute_submetric_correlations(graded, cfg)
     if set(correlations) != set(SUBMETRICS):
         return None  # some sub-metric lacked >= 3 non-missing observations
     return normalise_weights(correlations)

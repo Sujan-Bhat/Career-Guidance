@@ -7,7 +7,7 @@ from datetime import datetime
 
 from .models import BehaviourEvent, BehaviourSession
 
-RAPID_SWITCH_SECONDS = 30.0  # resource opened < 30s after the previous open
+RAPID_SWITCH_SECONDS = 30.0  # resource opened < 30s after the previous close
 
 
 def get_active_session(student_id: str):
@@ -22,9 +22,17 @@ def parse_timestamp(value) -> datetime:
     if isinstance(value, datetime):
         return value
     try:
-        return datetime.fromisoformat(str(value))
+        text = str(value)
+        # Python < 3.11 rejects the ISO "Z" suffix; normalise before parsing
+        if text.endswith("Z"):
+            text = text[:-1] + "+00:00"
+        return datetime.fromisoformat(text)
     except ValueError:
         return datetime.utcnow()
+
+
+def _gap_seconds(from_ts: datetime, to_ts: datetime) -> float:
+    return max(0.0, (to_ts - from_ts).total_seconds())
 
 
 def recompute_session_aggregates(session: BehaviourSession) -> BehaviourSession:
@@ -33,6 +41,17 @@ def recompute_session_aggregates(session: BehaviourSession) -> BehaviourSession:
     Quiz aggregates come from QuizAttempt documents (the structured FR04
     endpoint is the source of truth); raw quiz_attempt *events* are stored but
     not double-counted here.
+
+    Visit signals (fixes over the previous version, which hardcoded
+    idle_gap_seconds=0.0 and measured open->open gaps so neither DFET
+    heuristic could ever fire on live data):
+      * idle_gap_seconds — seconds the student spent idle (idle_start..idle_end
+        pairs) WITHIN the visit, from the SDK's visibility-change events. Idle
+        intervals are clamped to the visit window so an idle_start that fired
+        before the resource was opened (or before it closed) can never make
+        the gap exceed dwell_seconds;
+      * rapid_switch     — the visit was opened < 30s after the previous
+        resource_close (genuine switching, not dwell-contaminated).
     """
     events = list(
         BehaviourEvent.objects(session=str(session.pk)).order_by("timestamp")
@@ -42,37 +61,66 @@ def recompute_session_aggregates(session: BehaviourSession) -> BehaviourSession:
 
     tasks_started = sum(1 for e in events if e.type == "task_start")
     tasks_completed = sum(1 for e in events if e.type == "task_complete")
-    interaction_count = max(len(events) - 1, 0)  # exclude the synthetic session_end event
+    # the synthetic simulator stream ends with a literal "session_end" event;
+    # live SDK streams do not emit one, so only discount it when present
+    synthetic_session_end = bool(events) and events[-1].type == "session_end"
+    interaction_count = max(len(events) - (1 if synthetic_session_end else 0), 0)
 
-    resource_visits = []
-    open_at = None
-    prev_open = None
+    resource_visits: list[dict] = []
+    open_at: datetime | None = None
+    visit_type = "article"
+    visit_rapid = False
+    visit_idle_seconds = 0.0
+    idle_since: datetime | None = None
+    prev_close: datetime | None = None
+
     for event in events:
-        if event.type == "resource_open":
-            if open_at is not None:  # never closed -> close at the last known point
+        etype = event.type
+        if etype == "resource_open":
+            if open_at is not None:  # never closed -> close at the new open
+                if idle_since is not None:
+                    # pending idle belongs to the visit that is closing
+                    visit_idle_seconds += _gap_seconds(idle_since, event.timestamp)
+                    idle_since = None
                 resource_visits.append(
                     {
-                        "type": (event.metadata or {}).get("resource_type", "article"),
-                        "dwell_seconds": max(0.0, (event.timestamp - open_at).total_seconds()),
-                        "idle_gap_seconds": 0.0,
-                        "rapid_switch": prev_open is not None
-                        and (event.timestamp - prev_open).total_seconds() < RAPID_SWITCH_SECONDS,
+                        "type": visit_type,
+                        "dwell_seconds": _gap_seconds(open_at, event.timestamp),
+                        "idle_gap_seconds": min(visit_idle_seconds, _gap_seconds(open_at, event.timestamp)),
+                        "rapid_switch": visit_rapid,
                     }
                 )
-            prev_open = event.timestamp
+            visit_rapid = (
+                prev_close is not None
+                and _gap_seconds(prev_close, event.timestamp) < RAPID_SWITCH_SECONDS
+            )
             open_at = event.timestamp
-        elif event.type == "resource_close" and open_at is not None:
+            visit_type = (event.metadata or {}).get("resource_type", "article")
+            visit_idle_seconds = 0.0
+            # an idle interval started before this visit is not part of it
+            idle_since = None
+        elif etype == "resource_close" and open_at is not None:
+            if idle_since is not None:
+                # unclosed idle: count only the part inside the visit window
+                visit_idle_seconds += _gap_seconds(max(idle_since, open_at), event.timestamp)
+                idle_since = None
+            dwell = _gap_seconds(open_at, event.timestamp)
             resource_visits.append(
                 {
-                    "type": (event.metadata or {}).get("resource_type", "article"),
-                    "dwell_seconds": max(0.0, (event.timestamp - open_at).total_seconds()),
-                    "idle_gap_seconds": 0.0,
-                    "rapid_switch": prev_open is not None
-                    and prev_open != open_at
-                    and (open_at - prev_open).total_seconds() < RAPID_SWITCH_SECONDS,
+                    "type": visit_type,
+                    "dwell_seconds": dwell,
+                    "idle_gap_seconds": min(visit_idle_seconds, dwell),
+                    "rapid_switch": visit_rapid,
                 }
             )
             open_at = None
+            idle_since = None
+            prev_close = event.timestamp
+        elif etype == "idle_start" and idle_since is None:
+            idle_since = event.timestamp
+        elif etype == "idle_end" and idle_since is not None:
+            visit_idle_seconds += _gap_seconds(idle_since, event.timestamp)
+            idle_since = None
 
     # quiz aggregates from structured attempts (FR04)
     from apps.courses.models import QuizAttempt
