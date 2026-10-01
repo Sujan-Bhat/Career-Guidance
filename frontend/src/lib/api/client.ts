@@ -93,11 +93,18 @@ export function isLoggedIn(): boolean {
 
 export const endpoints = {
   auth: {
-    register: (payload: { email: string; full_name: string; password: string; programme?: string }) =>
-      api.post("/api/v1/accounts/register", payload),
+    register: (payload: {
+      email: string;
+      full_name: string;
+      password: string;
+      programme?: string;
+      year_of_study?: number;
+    }) => api.post("/api/v1/accounts/register", payload),
     login: (email: string, password: string) =>
       api.post("/api/v1/accounts/login", { email, password }),
     me: () => api.get("/api/v1/accounts/me"),
+    updateMe: (payload: { full_name?: string; programme?: string; year_of_study?: number }) =>
+      api.patch("/api/v1/accounts/me", payload),
   },
   fes: {
     current: () => api.get("/api/v1/fes/current"),
