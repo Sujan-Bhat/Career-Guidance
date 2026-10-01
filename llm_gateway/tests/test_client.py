@@ -4,7 +4,7 @@ import types
 
 import pytest
 
-from careermind_llm.client import PROVIDERS, get_client
+from careermind_llm.client import GEMINI_THINKING_HEADROOM, PROVIDERS, get_client
 from careermind_llm.client import AnthropicClient, GeminiClient, OpenAIClient
 
 MESSAGES = [
@@ -111,4 +111,5 @@ def test_gemini_adapter_flattens_chat(monkeypatch):
     assert captured["api_key"] == "g-key"
     assert captured["system_instruction"] == "Be helpful."
     assert captured["parts"] == ["Student: Hello"]
-    assert captured["config"]["max_output_tokens"] == 1024
+    # visible-budget contract: the caller's cap plus the thinking headroom
+    assert captured["config"]["max_output_tokens"] == 1024 + GEMINI_THINKING_HEADROOM

@@ -17,7 +17,7 @@ COPY ml ml
 COPY llm_gateway llm_gateway
 RUN pip install --no-cache-dir -e ml && \
     pip install --no-cache-dir -e llm_gateway && \
-    pip install --no-cache-dir openai
+    pip install --no-cache-dir openai google-generativeai
 
 # knowledge-graph seed + Mongo seeder (first run: python /app/data/seeds/seed_mongo.py)
 COPY data data

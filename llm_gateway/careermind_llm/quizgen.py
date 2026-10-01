@@ -39,6 +39,44 @@ def generate_quiz_items(skill: str, difficulty: int, n_items: int = 5, client=No
     return _parse_items(raw, n_items, difficulty)
 
 
+def _close_truncated_array(fragment: str):
+    """Best-effort repair of a JSON array cut off mid-element.
+
+    Walks the fragment with depth/stack tracking, returns the list of complete
+    top-level elements, or None when even the first element is incomplete."""
+    depth = 0
+    start = None
+    complete = []
+    in_str = False
+    esc = False
+    for i, ch in enumerate(fragment):
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0 and start is not None:
+                try:
+                    complete.append(json.loads(fragment[start : i + 1]))
+                except json.JSONDecodeError:
+                    return None
+                start = None
+        elif ch == "]" and depth == 0:
+            break
+    return complete or None
+
+
 def _parse_items(raw: str, n_items: int, difficulty: int) -> list[dict]:
     text = raw.strip()
     fence = re.search(r"```(?:json)?\s*(.*?)```", text, re.DOTALL)
@@ -50,7 +88,13 @@ def _parse_items(raw: str, n_items: int, difficulty: int) -> list[dict]:
     try:
         data = json.loads(text[start : end + 1])
     except json.JSONDecodeError as exc:
-        raise ValueError(f"LLM returned invalid quiz JSON: {exc}") from exc
+        # Thinking-era models can exhaust the output budget mid-array, leaving
+        # the last element truncated. Salvage every COMPLETE element instead of
+        # discarding the whole batch: close the array and drop the partial tail.
+        salvaged = _close_truncated_array(text[start:])
+        if salvaged is None:
+            raise ValueError(f"LLM returned invalid quiz JSON: {exc}") from exc
+        data = salvaged
     if not isinstance(data, list):
         raise ValueError("LLM quiz output must be a JSON array")
 

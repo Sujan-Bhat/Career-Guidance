@@ -129,3 +129,39 @@ def test_answer_pointing_at_a_blank_option_is_dropped():
     )
     items = generate_quiz_items("java", 1, n_items=2, client=FakeClient(raw))
     assert [i["question"] for i in items] == ["keep me"]
+
+def test_quiz_salvages_complete_items_from_truncated_array():
+    # thinking-era models can cut the output mid-array; the complete elements
+    # must survive instead of the whole batch being discarded
+    raw = json.dumps(_items(3))[:-40]  # cut inside the last element
+    items = generate_quiz_items("python", 2, n_items=5, client=FakeClient(raw))
+    assert len(items) == 2
+    assert items[0]["answer"] == 1
+
+
+def test_quiz_salvage_ignores_brackets_inside_strings():
+    raw = (
+        '[{"question": "Has [brackets] and {braces}?", "options": ["a", "b"], "answer": 0, "difficulty": 2}, '
+        '{"question": "Trunc'
+    )
+    items = generate_quiz_items("dsa", 2, n_items=5, client=FakeClient(raw))
+    assert len(items) == 1
+    assert items[0]["question"] == "Has [brackets] and {braces}?"
+
+
+def test_quiz_salvage_handles_escaped_quotes():
+    raw = (
+        '[{"question": "What does \\"float\\" mean?", "options": ["a", "b"], "answer": 1, "difficulty": 2}, '
+        '{"question": "Cut'
+    )
+    items = generate_quiz_items("java", 2, n_items=5, client=FakeClient(raw))
+    assert len(items) == 1
+    assert items[0]["question"] == 'What does "float" mean?'
+
+
+def test_quiz_raises_when_first_element_is_truncated():
+    # a ] inside a string value defeats the rfind guard, json.loads fails,
+    # and no complete element exists -> salvage returns None -> ValueError
+    raw = '[{"question": "has ] bracket", "options": ["a"'
+    with pytest.raises(ValueError, match="invalid quiz JSON"):
+        generate_quiz_items("python", 2, n_items=5, client=FakeClient(raw))

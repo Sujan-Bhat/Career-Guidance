@@ -86,12 +86,23 @@ class GeminiClient(LLMClient):
             for m in messages
             if m["role"] != "system"
         ]
+        # Thinking-era Gemini models spend the output budget on invisible
+        # reasoning before emitting any text, so a caller-sized cap truncates
+        # the visible answer mid-JSON. Pad the cap with headroom so the
+        # requested budget applies to the VISIBLE response.
         response = model.generate_content(
             parts,
-            generation_config={"temperature": temperature, "max_output_tokens": max_tokens},
+            generation_config={
+                "temperature": temperature,
+                "max_output_tokens": max_tokens + GEMINI_THINKING_HEADROOM,
+            },
         )
         return (response.text or "").strip()
 
+
+# Invisible reasoning tokens consumed before the visible answer; observed
+# ~1400 on quiz generation with max_tokens=1500 (only 57 visible tokens).
+GEMINI_THINKING_HEADROOM = 2048
 
 _CLASSES = {
     "openai": OpenAIClient,
