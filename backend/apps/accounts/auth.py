@@ -4,6 +4,8 @@ Access tokens (60 min) and refresh tokens (7 days) are minted with PyJWT and
 signed with Django's SECRET_KEY. The `sub` claim carries the StudentProfile
 ObjectID; DRF sees the profile as `request.user`.
 """
+import base64
+import hashlib
 from datetime import datetime, timedelta, timezone
 
 import jwt
@@ -47,19 +49,48 @@ def decode_token(token: str, expected_type: str) -> dict:
     return payload
 
 
+# Marker distinguishing the pre-hashed scheme from pre-hardening raw-bcrypt
+# hashes (`$2b$...`). Django uses the same idea for BCryptSHA256.
+PREHASH_PREFIX = "sha256$"
+
+
+def _pre_hash(plain: str) -> str:
+    """SHA-256 digest, base64-encoded, as the bcrypt input.
+
+    bcrypt silently truncates its input at 72 bytes, so two passwords sharing
+    the first 72 bytes were interchangeable. Hashing first removes the limit
+    entirely (the bcrypt input is always 44 ASCII chars); base64 keeps the
+    digest away from NUL bytes, which would truncate bcrypt's C-string input.
+    """
+    digest = hashlib.sha256(plain.encode("utf-8")).digest()
+    return base64.b64encode(digest).decode("ascii")
+
+
 def hash_password(plain: str) -> str:
     import bcrypt
 
-    return bcrypt.hashpw(plain.encode(), bcrypt.gensalt()).decode()
+    hashed = bcrypt.hashpw(_pre_hash(plain).encode(), bcrypt.gensalt()).decode()
+    return PREHASH_PREFIX + hashed
 
 
 def verify_password(plain: str, hashed: str) -> bool:
     import bcrypt
 
     try:
-        return bcrypt.checkpw(plain.encode(), hashed.encode())
+        if hashed.startswith(PREHASH_PREFIX):
+            return bcrypt.checkpw(
+                _pre_hash(plain).encode(), hashed[len(PREHASH_PREFIX):].encode()
+            )
+        # pre-hardening account: raw bcrypt over the original password
+        # (bcrypt truncates at 72 bytes, which is exactly what that hash saw)
+        return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode())
     except ValueError:
         return False
+
+
+def needs_rehash(hashed: str) -> bool:
+    """True for legacy raw-bcrypt hashes; LoginView re-hashes on success."""
+    return not hashed.startswith(PREHASH_PREFIX)
 
 
 class CareermindJWTAuthentication(authentication.BaseAuthentication):

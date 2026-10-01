@@ -1,5 +1,9 @@
 """Auth tests (Phase 3): register -> login -> me round trip, JWT guards."""
+import time
+from datetime import datetime, timezone
+
 import pytest
+from django.test import override_settings
 
 from .models import StudentProfile
 
@@ -119,3 +123,158 @@ def test_unknown_subject_is_still_an_auth_failure(api):
     api.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
     response = api.get("/api/v1/accounts/me")
     assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Password hardening: SHA-256 pre-hash before bcrypt (72-byte truncation fix)
+# ---------------------------------------------------------------------------
+
+LONG_A = "K" * 80  # 80 bytes — past bcrypt's 72-byte silent truncation
+LONG_B = "K" * 72 + "different-suffix"  # identical first 72 bytes to LONG_A
+
+
+def test_long_password_round_trip(api):
+    """>72-byte passwords keep full entropy: register + login round trip."""
+    payload = {**REGISTER, "email": "long@test.local", "password": LONG_A}
+    assert api.post("/api/v1/accounts/register", payload, format="json").status_code == 201
+    login = api.post(
+        "/api/v1/accounts/login",
+        {"email": "long@test.local", "password": LONG_A},
+        format="json",
+    )
+    assert login.status_code == 200
+    assert login.data["access"]
+
+
+def test_long_passwords_sharing_72_byte_prefix_are_distinct(api):
+    """Regression: raw bcrypt truncated at 72 bytes, so LONG_B authenticated
+    against LONG_A's account. The SHA-256 pre-hash makes them distinct."""
+    payload = {**REGISTER, "email": "prefix@test.local", "password": LONG_A}
+    api.post("/api/v1/accounts/register", payload, format="json")
+    response = api.post(
+        "/api/v1/accounts/login",
+        {"email": "prefix@test.local", "password": LONG_B},
+        format="json",
+    )
+    assert response.status_code == 401
+
+
+def test_new_hashes_carry_the_prehash_marker(api):
+    payload = {**REGISTER, "email": "marker@test.local"}
+    api.post("/api/v1/accounts/register", payload, format="json")
+    profile = StudentProfile.objects(email="marker@test.local").first()
+    assert profile.password_hash.startswith("sha256$")
+    assert len(profile.password_hash) == len("sha256$") + 60  # + bcrypt digest
+
+
+def test_legacy_hash_still_verifies_and_upgrades(api):
+    """Pre-hardening accounts (raw bcrypt) keep working, and their first
+    successful login transparently re-hashes to the pre-hashed scheme."""
+    import bcrypt as raw_bcrypt
+
+    legacy_hash = raw_bcrypt.hashpw(b"password123", raw_bcrypt.gensalt()).decode()
+    assert not legacy_hash.startswith("sha256$")
+    StudentProfile(
+        email="legacy@test.local",
+        full_name="Legacy Student",
+        password_hash=legacy_hash,
+        created_at=datetime.now(timezone.utc),
+    ).save()
+
+    login = api.post(
+        "/api/v1/accounts/login",
+        {"email": "legacy@test.local", "password": "password123"},
+        format="json",
+    )
+    assert login.status_code == 200
+
+    profile = StudentProfile.objects(email="legacy@test.local").first()
+    assert profile.password_hash.startswith("sha256$")  # upgraded in place
+    assert profile.password_hash != legacy_hash
+
+    # the upgraded hash verifies again on the next login
+    assert api.post(
+        "/api/v1/accounts/login",
+        {"email": "legacy@test.local", "password": "password123"},
+        format="json",
+    ).status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Login throttling: fixed-window failure lockout per (email, IP)
+# ---------------------------------------------------------------------------
+
+
+def _login(api, email, password="wrong-password", **extra):
+    return api.post(
+        "/api/v1/accounts/login",
+        {"email": email, "password": password},
+        format="json",
+        **extra,
+    )
+
+
+@override_settings(LOGIN_FAILURE_LIMIT=3)
+def test_lockout_after_limit_failures(api):
+    """`limit` failures lock the (email, IP) pair out — even the CORRECT
+    password gets 429 while the window is open."""
+    api.post("/api/v1/accounts/register", REGISTER, format="json")
+    for _ in range(3):
+        assert _login(api, REGISTER["email"]).status_code == 401
+    response = _login(api, REGISTER["email"], REGISTER["password"])
+    assert response.status_code == 429
+
+
+@override_settings(LOGIN_FAILURE_LIMIT=3)
+def test_successful_login_resets_failure_counter(api):
+    """Two failures, a success, then two more failures must never trip the
+    limit: a successful login clears the counter so legitimate users recover
+    immediately."""
+    api.post("/api/v1/accounts/register", REGISTER, format="json")
+    assert _login(api, REGISTER["email"]).status_code == 401
+    assert _login(api, REGISTER["email"]).status_code == 401
+    assert _login(api, REGISTER["email"], REGISTER["password"]).status_code == 200
+    assert _login(api, REGISTER["email"]).status_code == 401
+    assert _login(api, REGISTER["email"]).status_code == 401
+    # cumulative would be 4 failures without the reset; the limit is 3
+    assert _login(api, REGISTER["email"], REGISTER["password"]).status_code == 200
+
+
+@override_settings(LOGIN_FAILURE_LIMIT=3)
+def test_lockout_is_scoped_per_email(api):
+    """Locking one account must not lock another (no cross-account DoS)."""
+    other = {**REGISTER, "email": "other@test.local"}
+    api.post("/api/v1/accounts/register", REGISTER, format="json")
+    api.post("/api/v1/accounts/register", other, format="json")
+    for _ in range(3):
+        assert _login(api, REGISTER["email"]).status_code == 401
+    assert _login(api, REGISTER["email"], REGISTER["password"]).status_code == 429
+    assert _login(api, other["email"], other["password"]).status_code == 200
+
+
+@override_settings(LOGIN_FAILURE_LIMIT=3)
+def test_lockout_is_scoped_per_ip(api):
+    """The IP is part of the key: the same email from a different IP is free."""
+    api.post("/api/v1/accounts/register", REGISTER, format="json")
+    for _ in range(3):
+        assert _login(api, REGISTER["email"], REMOTE_ADDR="10.9.9.9").status_code == 401
+    assert (
+        _login(api, REGISTER["email"], REGISTER["password"], REMOTE_ADDR="10.9.9.9").status_code
+        == 429
+    )
+    assert (
+        _login(api, REGISTER["email"], REGISTER["password"], REMOTE_ADDR="10.9.9.10").status_code
+        == 200
+    )
+
+
+@override_settings(LOGIN_FAILURE_LIMIT=3, LOGIN_LOCKOUT_WINDOW_SECONDS=2)
+def test_lockout_expires_after_window(api):
+    """The lockout is a fixed window, not permanent: after it expires the
+    account is reachable again."""
+    api.post("/api/v1/accounts/register", REGISTER, format="json")
+    for _ in range(3):
+        assert _login(api, REGISTER["email"]).status_code == 401
+    assert _login(api, REGISTER["email"], REGISTER["password"]).status_code == 429
+    time.sleep(2.1)  # window is 2s; cache expiry is checked lazily
+    assert _login(api, REGISTER["email"], REGISTER["password"]).status_code == 200

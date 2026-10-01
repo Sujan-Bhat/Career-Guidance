@@ -11,3 +11,9 @@ mongoengine.connect(db=MONGO_DB_NAME, host=MONGO_URI, alias="default")  # noqa: 
 
 CELERY_BROKER_URL = "memory://"
 CELERY_TASK_ALWAYS_EAGER = True
+
+# the repo-root .env may carry REDIS_URL (for the compose stack) — tests must
+# never reach into it: force the in-process LocMem cache for determinism
+CACHES = {
+    "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "careermind-test"}
+}

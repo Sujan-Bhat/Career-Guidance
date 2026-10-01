@@ -6,10 +6,14 @@ from pymongo import MongoClient
 
 @pytest.fixture(autouse=True)
 def clean_test_db():
+    from django.core.cache import cache
+
     client = MongoClient(django_settings.MONGO_URI)
     client.drop_database(django_settings.MONGO_DB_NAME)
+    cache.clear()  # login-throttle counters must not leak between tests
     yield
     client.drop_database(django_settings.MONGO_DB_NAME)
+    cache.clear()
 
 
 @pytest.fixture

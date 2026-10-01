@@ -6,8 +6,9 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .auth import hash_password, mint_tokens, verify_password, decode_token
+from .auth import hash_password, mint_tokens, needs_rehash, verify_password, decode_token
 from .models import StudentProfile
+from .throttling import client_ip, is_locked_out, register_failure, reset_failures
 from .serializers import (
     LoginSerializer,
     ProfileSerializer,
@@ -57,18 +58,36 @@ class RegisterView(APIView):
 
 
 class LoginView(APIView):
-    """NFR04: email + password -> access/refresh JWT pair."""
+    """NFR04: email + password -> access/refresh JWT pair.
+
+    Hardened: repeated failed attempts for one (email, IP) pair lock that
+    pair out of LOGIN_FAILURE_LIMIT within a fixed window, and pre-hardening
+    raw-bcrypt accounts transparently upgrade to the pre-hashed scheme on
+    their first successful login.
+    """
 
     permission_classes = [AllowAny]
 
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        profile = StudentProfile.objects(email=serializer.validated_data["email"]).first()
+        email = serializer.validated_data["email"]
+        ip = client_ip(request)
+        if is_locked_out(email, ip):
+            return Response(
+                {"detail": "Too many failed login attempts — try again later."},
+                status=429,
+            )
+        profile = StudentProfile.objects(email=email).first()
         if not profile or not verify_password(
             serializer.validated_data["password"], profile.password_hash
         ):
+            register_failure(email, ip)
             return Response({"detail": "Invalid credentials"}, status=401)
+        reset_failures(email, ip)
+        if needs_rehash(profile.password_hash):
+            profile.password_hash = hash_password(serializer.validated_data["password"])
+            profile.save()
         return _auth_response(profile, status.HTTP_200_OK)
 
 
