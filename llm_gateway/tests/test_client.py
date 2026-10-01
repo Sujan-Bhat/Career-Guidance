@@ -113,3 +113,142 @@ def test_gemini_adapter_flattens_chat(monkeypatch):
     assert captured["parts"] == ["Student: Hello"]
     # visible-budget contract: the caller's cap plus the thinking headroom
     assert captured["config"]["max_output_tokens"] == 1024 + GEMINI_THINKING_HEADROOM
+
+
+# ---------------------------------------------------------------------------
+# Gemini model failover: 429 quota / 404 retired models walk the fallback chain
+# ---------------------------------------------------------------------------
+
+
+class _ResourceExhausted(Exception):
+    """Mirrors google.api_core.exceptions.ResourceExhausted (429 quota)."""
+
+
+class _NotFound(Exception):
+    """Mirrors google.api_core.exceptions.NotFound (404 model unavailable)."""
+
+
+def _install_fake_gemini(monkeypatch, outcomes):
+    """Fake google.generativeai + google.api_core.exceptions.
+
+    `outcomes` maps model name -> text to return or exception to raise; the
+    captured call order lets tests assert exactly which models were tried.
+    """
+    captured = {"calls": []}
+    module = types.ModuleType("google.generativeai")
+    module.configure = lambda api_key=None: None
+
+    exceptions = types.ModuleType("google.api_core.exceptions")
+    exceptions.ResourceExhausted = _ResourceExhausted
+    exceptions.NotFound = _NotFound
+    api_core = types.ModuleType("google.api_core")
+    api_core.exceptions = exceptions
+
+    class _Model:
+        def __init__(self, model_name, system_instruction=None):
+            self.model_name = model_name
+
+        def generate_content(self, parts, generation_config=None):
+            captured["calls"].append(self.model_name)
+            outcome = outcomes[self.model_name]
+            if isinstance(outcome, Exception):
+                raise outcome
+            return types.SimpleNamespace(text=outcome)
+
+    module.GenerativeModel = _Model
+    package = types.ModuleType("google")
+    package.generativeai = module
+    package.api_core = api_core
+    monkeypatch.setitem(sys.modules, "google", package)
+    monkeypatch.setitem(sys.modules, "google.generativeai", module)
+    monkeypatch.setitem(sys.modules, "google.api_core", api_core)
+    monkeypatch.setitem(sys.modules, "google.api_core.exceptions", exceptions)
+    return captured
+
+
+def test_quota_error_fails_over_to_fallback_model(monkeypatch):
+    """A 429 on the primary must not reach the caller while a fallback can
+    answer — daily quota is a per-model bucket, so the next model can."""
+    captured = _install_fake_gemini(
+        monkeypatch,
+        {
+            "gemini-primary": _ResourceExhausted("429 quota exceeded"),
+            "gemini-fallback": "  answer  ",
+        },
+    )
+    monkeypatch.setenv("LLM_FALLBACK_MODELS", "gemini-fallback")
+
+    client = GeminiClient(api_key="k", model="gemini-primary")
+    assert client.complete(MESSAGES) == "answer"
+    assert captured["calls"] == ["gemini-primary", "gemini-fallback"]
+
+
+def test_retired_model_fails_over_too(monkeypatch):
+    """Google retires models outright (the gemini-2.5-flash case); a 404 on
+    the primary is equally environmental and must fail over."""
+    captured = _install_fake_gemini(
+        monkeypatch,
+        {
+            "gemini-retired": _NotFound("models/gemini-retired is not found"),
+            "gemini-fallback": "ok",
+        },
+    )
+    monkeypatch.setenv("LLM_FALLBACK_MODELS", "gemini-fallback")
+
+    client = GeminiClient(api_key="k", model="gemini-retired")
+    assert client.complete(MESSAGES) == "ok"
+    assert captured["calls"] == ["gemini-retired", "gemini-fallback"]
+
+
+def test_unrelated_errors_surface_immediately(monkeypatch):
+    """A malformed request (or bad key) is NOT a model problem — failing over
+    would hide the bug behind whichever model answers next."""
+    captured = _install_fake_gemini(
+        monkeypatch, {"gemini-primary": ValueError("invalid request payload")}
+    )
+    monkeypatch.setenv("LLM_FALLBACK_MODELS", "gemini-fallback")
+
+    client = GeminiClient(api_key="k", model="gemini-primary")
+    with pytest.raises(ValueError, match="invalid request payload"):
+        client.complete(MESSAGES)
+    assert captured["calls"] == ["gemini-primary"]  # single attempt, no failover
+
+
+def test_all_candidates_exhausted_raises_last_error(monkeypatch):
+    """When every model is out of quota the real 429 propagates, so callers
+    keep their existing 502 handling instead of seeing a synthetic error."""
+    captured = _install_fake_gemini(
+        monkeypatch,
+        {
+            "gemini-a": _ResourceExhausted("primary quota gone"),
+            "gemini-b": _ResourceExhausted("fallback quota gone"),
+        },
+    )
+    monkeypatch.setenv("LLM_FALLBACK_MODELS", "gemini-b")
+
+    client = GeminiClient(api_key="k", model="gemini-a")
+    with pytest.raises(_ResourceExhausted, match="fallback quota gone"):
+        client.complete(MESSAGES)
+    assert captured["calls"] == ["gemini-a", "gemini-b"]
+
+
+def test_model_chain_parsing_and_dedup(monkeypatch):
+    """Whitespace-tolerant, order-preserving, duplicates dropped."""
+    monkeypatch.setenv("LLM_FALLBACK_MODELS", " gemini-b , gemini-a , gemini-b,,")
+    assert GeminiClient(api_key="k", model="gemini-a").models == ["gemini-a", "gemini-b"]
+    assert GeminiClient(api_key="k", model="gemini-b").models == ["gemini-b", "gemini-a"]
+
+
+def test_model_chain_without_fallbacks_is_single_model(monkeypatch):
+    """No LLM_FALLBACK_MODELS -> exactly the pre-failover behaviour."""
+    monkeypatch.delenv("LLM_FALLBACK_MODELS", raising=False)
+    assert GeminiClient(api_key="k", model="gemini-only").models == ["gemini-only"]
+    assert GeminiClient(api_key="k", model="").models == ["gemini-1.5-flash"]
+
+
+def test_factory_wires_env_fallbacks(monkeypatch):
+    """get_client(...) must pick up the env fallback list — quizgen, explain
+    and chat all build their clients through the factory."""
+    monkeypatch.setenv("LLM_FALLBACK_MODELS", "gemini-b")
+    client = get_client("gemini", api_key="k", model="gemini-a")
+    assert client.models == ["gemini-a", "gemini-b"]
