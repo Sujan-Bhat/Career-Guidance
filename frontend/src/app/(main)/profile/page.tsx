@@ -35,6 +35,7 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [fes, setFes] = useState<FesBadge>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [needsLogin, setNeedsLogin] = useState(false);
 
   const [fullName, setFullName] = useState("");
   const [programme, setProgramme] = useState("");
@@ -51,8 +52,13 @@ export default function ProfilePage() {
       setProgramme(data.programme ?? "");
       setYear(data.year_of_study ?? 3);
       setLoadError(null);
-    } catch {
-      setLoadError("Could not load your profile. Try refreshing the page.");
+      setNeedsLogin(false);
+    } catch (err: any) {
+      if (err?.response?.status === 401) {
+        setNeedsLogin(true); // silent refresh already ran and failed
+      } else {
+        setLoadError("Could not load your profile. Try refreshing the page.");
+      }
     }
   }, []);
 
@@ -90,6 +96,17 @@ export default function ProfilePage() {
     }
   };
 
+  if (needsLogin) {
+    return (
+      <p className="text-sm text-slate-600">
+        Your session has ended.{" "}
+        <a href="/login" className="font-medium text-primary hover:underline">
+          Log in
+        </a>{" "}
+        to view your profile.
+      </p>
+    );
+  }
   if (loadError) {
     return <p className="text-sm text-red-600">{loadError}</p>;
   }
