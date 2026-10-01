@@ -100,15 +100,15 @@ export default function QuizPage() {
     }
   };
 
-  const postAttempt = async (quizId: string, itemId: string, correct: boolean) => {
-    track("quiz_attempt", { resource_id: quizId, metadata: { item_id: itemId, correct } });
+  const postAttempt = async (quizId: string, itemId: string, selected: number) => {
+    track("quiz_attempt", { resource_id: quizId, metadata: { item_id: itemId, selected } });
     try {
-      await endpoints.courses.quizAttempt(quizId, { item_id: itemId, correct });
+      await endpoints.courses.quizAttempt(quizId, { item_id: itemId, selected });
     } catch (err) {
       const response = (err as { response?: { status?: number; data?: { detail?: string } } }).response;
       if (response?.status === 400 && (response.data?.detail ?? "").includes("active session")) {
         await endpoints.collector.startSession(); // ensure a tracked session exists
-        await endpoints.courses.quizAttempt(quizId, { item_id: itemId, correct });
+        await endpoints.courses.quizAttempt(quizId, { item_id: itemId, selected });
         return;
       }
       throw err;
@@ -123,10 +123,10 @@ export default function QuizPage() {
     const outcome: Record<number, boolean> = {};
     try {
       for (let i = 0; i < active.questions.length; i += 1) {
-        const selected = answers[i];
-        const correct = selected !== undefined && selected === active.questions[i].answer;
+        const selected = answers[i] === undefined ? -1 : answers[i];
+        const correct = selected !== -1 && selected === active.questions[i].answer;
         outcome[i] = correct;
-        await postAttempt(active.quiz_id, `q${i}`, correct);
+        await postAttempt(active.quiz_id, `q${i}`, selected);
       }
       setResults(outcome);
     } catch (err) {

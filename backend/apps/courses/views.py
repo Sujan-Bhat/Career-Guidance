@@ -1,5 +1,7 @@
+import re
 from datetime import datetime
 
+from mongoengine.errors import ValidationError as MongoValidationError
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -8,6 +10,18 @@ from rest_framework.views import APIView
 from ..collector.models import BehaviourSession
 from ..collector.services import get_active_session
 from .models import Course, Quiz, QuizAttempt
+
+# Item ids are question indices: "q0", "q1", ... (bounded so a hand-crafted
+# "q" + digits payload can't smuggle anything else through)
+_ITEM_ID_PATTERN = re.compile(r"^q(\d{1,8})$")
+
+
+def _get_quiz_or_404(quiz_id):
+    """Fetch a quiz by id; malformed ObjectIds are 404, not an unhandled 500."""
+    try:
+        return Quiz.objects(pk=quiz_id).first()
+    except MongoValidationError:
+        return None
 
 
 class CourseListView(APIView):
@@ -63,11 +77,12 @@ class QuizListView(APIView):
 
 
 class QuizDetailView(APIView):
-    """Quiz questions with answers — JWT only (the client scores each item
-    and posts attempts, which require an active tracked session)."""
+    """Quiz questions with answers — JWT only. Answers are informational for
+    the taker (review mode); attempts are scored SERVER-SIDE, so the client's
+    belief about correctness is never trusted (see QuizAttemptView)."""
 
     def get(self, request, quiz_id):
-        quiz = Quiz.objects(pk=quiz_id).first()
+        quiz = _get_quiz_or_404(quiz_id)
         if quiz is None:
             return Response({"detail": "Quiz not found"}, status=404)
         return Response(_serialize_quiz(quiz, include_questions=True))
@@ -79,16 +94,39 @@ class QuizAttemptView(APIView):
     Persists a structured QuizAttempt (source of truth for the session's quiz
     aggregates -> QAP) and updates the student's active session counters,
     including re-attempt detection for previously-incorrect items.
+
+    Hardened (security review): the client sends only WHAT it selected
+    (`selected`: option index, or -1 for "no answer") — never whether it was
+    right. `correct` is computed here from the stored question's answer, so a
+    tampering client can only hurt its own score. `item_id` must be the exact
+    `q<index>` of a question that exists in this quiz (no phantom items, no
+    10k-char garbage rows).
     """
 
     def post(self, request, quiz_id):
-        quiz = Quiz.objects(pk=quiz_id).first()
+        quiz = _get_quiz_or_404(quiz_id)
+        if quiz is None:
+            return Response({"detail": "Quiz not found"}, status=404)
+
         item_id = request.data.get("item_id")
-        correct = request.data.get("correct")
-        if quiz is None or not item_id or not isinstance(correct, bool):
+        selected = request.data.get("selected")
+        if not isinstance(item_id, str) or not isinstance(selected, int) or isinstance(selected, bool):
             return Response(
-                {"detail": "Requires quiz_id (path), item_id, correct (bool)"}, status=400
+                {"detail": "Requires item_id ('q<index>') and selected (option index int, -1 = unanswered)"},
+                status=400,
             )
+
+        questions = quiz.questions or []
+        match = _ITEM_ID_PATTERN.fullmatch(item_id)
+        if match is None or int(match.group(1)) >= len(questions):
+            return Response({"detail": "Unknown item_id for this quiz"}, status=400)
+
+        question = questions[int(match.group(1))]
+        options = question.get("options") or []
+        if not -1 <= selected < len(options):
+            return Response({"detail": "selected out of range for this item"}, status=400)
+
+        correct = selected == question.get("answer")
 
         session = get_active_session(request.user.student_id)
         if session is None:
@@ -116,6 +154,7 @@ class QuizAttemptView(APIView):
             {
                 "quiz": str(quiz.pk),
                 "item_id": item_id,
+                "selected": selected,
                 "correct": correct,
                 "is_reattempt": is_reattempt,
             },

@@ -123,7 +123,7 @@ export const endpoints = {
     list: () => api.get("/api/v1/courses/"),
     quizzes: () => api.get("/api/v1/courses/quizzes"),
     quiz: (id: string) => api.get(`/api/v1/courses/quizzes/${id}`),
-    quizAttempt: (quizId: string, payload: { item_id: string; correct: boolean }) =>
+    quizAttempt: (quizId: string, payload: { item_id: string; selected: number }) =>
       api.post(`/api/v1/courses/quizzes/${quizId}/attempt`, payload),
   },
   llm: {
