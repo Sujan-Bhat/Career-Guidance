@@ -54,6 +54,49 @@ def test_recommendations_cold_start_flow(registered):
 
 
 @pytest.mark.usefixtures("seeded_population")
+def test_list_reuses_rows_instead_of_duplicating(registered):
+    """Every GET used to insert a fresh batch of pending rows, so one
+    student+item accumulated 11 documents and decisions were shadowed by the
+    duplicates on the next visit. Rows must be reused and refreshed instead."""
+    client, user = registered
+
+    first = client.get("/api/v1/recommendations/")
+    assert first.status_code == 200
+    ids_after_first = {r["recommendation_id"] for r in first.data["recommendations"]}
+    count_after_first = first.data["count"]
+
+    second = client.get("/api/v1/recommendations/")
+    assert second.status_code == 200
+
+    from apps.recommendations.models import Recommendation
+
+    assert Recommendation.objects(student=user["student_id"]).count() == count_after_first
+    assert {r["recommendation_id"] for r in second.data["recommendations"]} == ids_after_first
+
+
+@pytest.mark.usefixtures("seeded_population")
+def test_decisions_survive_page_reload(registered):
+    client, _ = registered
+    rec = client.get("/api/v1/recommendations/").data["recommendations"][0]
+    assert client.post(f"/api/v1/recommendations/{rec['recommendation_id']}/accept").status_code == 200
+
+    reloaded = client.get("/api/v1/recommendations/").data["recommendations"]
+    match = next(r for r in reloaded if r["id"] == rec["id"])
+    assert match["recommendation_id"] == rec["recommendation_id"]
+    assert match["decision"] == "accepted"
+
+
+@pytest.mark.usefixtures("seeded_population")
+def test_rejected_items_are_not_resurfaced(registered):
+    client, _ = registered
+    rec = client.get("/api/v1/recommendations/").data["recommendations"][0]
+    assert client.post(f"/api/v1/recommendations/{rec['recommendation_id']}/reject").status_code == 200
+
+    reloaded = client.get("/api/v1/recommendations/").data["recommendations"]
+    assert all(r["id"] != rec["id"] for r in reloaded)
+
+
+@pytest.mark.usefixtures("seeded_population")
 def test_accept_and_reject_decision_flow(registered):
     client, _ = registered
     rec_id = client.get("/api/v1/recommendations/").data["recommendations"][0]["recommendation_id"]

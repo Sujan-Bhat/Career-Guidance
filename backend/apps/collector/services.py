@@ -52,6 +52,10 @@ def recompute_session_aggregates(session: BehaviourSession) -> BehaviourSession:
         the gap exceed dwell_seconds;
       * rapid_switch     — the visit was opened < 30s after the previous
         resource_close (genuine switching, not dwell-contaminated).
+
+    interaction_count excludes session_start/session_end lifecycle markers so
+    it stays comparable between simulator streams (which emit them) and live
+    SDK streams (which do not).
     """
     events = list(
         BehaviourEvent.objects(session=str(session.pk)).order_by("timestamp")
@@ -61,10 +65,11 @@ def recompute_session_aggregates(session: BehaviourSession) -> BehaviourSession:
 
     tasks_started = sum(1 for e in events if e.type == "task_start")
     tasks_completed = sum(1 for e in events if e.type == "task_complete")
-    # the synthetic simulator stream ends with a literal "session_end" event;
-    # live SDK streams do not emit one, so only discount it when present
-    synthetic_session_end = bool(events) and events[-1].type == "session_end"
-    interaction_count = max(len(events) - (1 if synthetic_session_end else 0), 0)
+    # session_start/session_end are stream bookkeeping, not student behaviour:
+    # count neither (the old trailing-only discount missed session_start, so
+    # every simulator session overcounted interactions by one)
+    lifecycle = {"session_start", "session_end"}
+    interaction_count = sum(1 for e in events if e.type not in lifecycle)
 
     resource_visits: list[dict] = []
     open_at: datetime | None = None

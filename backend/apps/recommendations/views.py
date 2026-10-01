@@ -90,17 +90,30 @@ class RecommendationListView(APIView):
 
         payload = []
         for ranked in result["results"]:
-            doc = Recommendation(
-                student=request.user.student_id,
-                item_type="pathway",
-                item_id=ranked["id"],
-                stage1_eligible=ranked["stage1_eligible"],
-                stage2_cf_score=ranked["stage2_cf_score"],
-                stage3_fm_score=ranked["stage3_fm_score"],
-                contributing_features=ranked["contributing_features"],
-                decision="pending",
-                created_at=datetime.utcnow(),
-            ).save()
+            doc = Recommendation.objects(
+                student=request.user.student_id, item_id=ranked["id"]
+            ).order_by("-created_at").first()
+            if doc is None:
+                doc = Recommendation(
+                    student=request.user.student_id,
+                    item_type="pathway",
+                    item_id=ranked["id"],
+                    decision="pending",
+                )
+            elif doc.decision == "rejected":
+                # the student already declined this pathway; re-surfacing it as
+                # a fresh pending row would make the decision look undone
+                continue
+            # refresh provenance in place: every row carries the LATEST cascade
+            # output (the old code inserted a new pending row per GET, so one
+            # student+item accumulated 11 documents and accept/reject decisions
+            # were visually shadowed by the duplicates on the next visit)
+            doc.stage1_eligible = ranked["stage1_eligible"]
+            doc.stage2_cf_score = ranked["stage2_cf_score"]
+            doc.stage3_fm_score = ranked["stage3_fm_score"]
+            doc.contributing_features = ranked["contributing_features"]
+            doc.created_at = doc.created_at or datetime.utcnow()
+            doc.save()
             payload.append(_serialize(doc, ranked))
 
         return Response(

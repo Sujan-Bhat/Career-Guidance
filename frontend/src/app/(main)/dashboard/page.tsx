@@ -19,6 +19,15 @@ export default function DashboardPage() {
     queryKey: ["fes", "current"],
     queryFn: () => endpoints.fes.current(),
     enabled: loggedIn,
+    // the session-end FES task runs on Celery asynchronously: right after
+    // login/first browse the row legitimately does not exist yet, so retry
+    // the 404 a few times before showing the "complete a session" message
+    retry: (failureCount, err) => {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status !== 404) return false;
+      return failureCount < 3;
+    },
+    retryDelay: 2000,
   });
   const { data: historyData } = useQuery({
     queryKey: ["fes", "history"],

@@ -80,7 +80,10 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
       await fetch(`${API_BASE}/api/v1/collector/events/batch`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ events: batch }),
+        // session_id stated explicitly: server-side "newest active session"
+        // resolution is only a fallback, and events must never land in the
+        // wrong (e.g. duplicate-start orphan) session
+        body: JSON.stringify({ session_id: sessionId.current, events: batch }),
         keepalive: true,
       });
     } catch {

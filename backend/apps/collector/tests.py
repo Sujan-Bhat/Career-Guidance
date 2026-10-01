@@ -19,6 +19,59 @@ def test_session_start_creates_active_session(registered):
     assert session.student == user["student_id"]
 
 
+def test_duplicate_start_closes_previous_session(registered):
+    """Single-session invariant: a second start (React StrictMode
+    double-mount, retried request, second tab) must force-complete the
+    previous active session instead of leaving it open forever as an orphan
+    whose events never reach FES."""
+    client, user = registered
+    first = client.post("/api/v1/collector/sessions/start").data["session_id"]
+    second = client.post("/api/v1/collector/sessions/start").data["session_id"]
+    assert first != second
+
+    from apps.collector.models import BehaviourSession
+
+    previous = BehaviourSession.objects(pk=first).first()
+    assert previous.status == "completed"
+    assert previous.ended_at is not None
+    assert BehaviourSession.objects(student=user["student_id"], status="active").count() == 1
+    assert BehaviourSession.objects(pk=second).first().status == "active"
+
+
+def test_lifecycle_events_do_not_count_as_interactions(registered):
+    """session_start/session_end are stream bookkeeping, not student
+    behaviour: interaction_count must exclude both (simulator streams emit
+    them; live SDK streams do not — the counts must stay comparable)."""
+    client, _ = registered
+    session_id = client.post("/api/v1/collector/sessions/start").data["session_id"]
+
+    base = datetime.utcnow() + timedelta(seconds=1)
+    events = [
+        {"type": "session_start", "timestamp": base.isoformat()},
+        {"type": "page_view", "timestamp": (base + timedelta(seconds=5)).isoformat()},
+        {"type": "task_start", "timestamp": (base + timedelta(seconds=10)).isoformat()},
+        {"type": "session_end", "timestamp": (base + timedelta(seconds=15)).isoformat()},
+    ]
+    response = client.post(
+        "/api/v1/collector/events/batch",
+        {"session_id": session_id, "events": events},
+        format="json",
+    )
+    assert response.status_code == 200
+    assert response.data["stored"] == 4
+
+    from apps.collector.models import BehaviourSession
+    from apps.collector.services import recompute_session_aggregates
+
+    session = BehaviourSession.objects(pk=session_id).first()
+    session.started_at = base
+    session.ended_at = base + timedelta(minutes=1)
+    recompute_session_aggregates(session)
+
+    session.reload()
+    assert session.interaction_count == 2  # page_view + task_start only
+
+
 def test_events_require_active_session(registered):
     client, _ = registered
     response = client.post(

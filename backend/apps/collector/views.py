@@ -7,6 +7,13 @@ from rest_framework.views import APIView
 from .models import BehaviourEvent, BehaviourSession
 from .services import get_active_session, parse_timestamp
 
+
+def _fes_task():
+    """Lazy import: avoids a circular import with apps.fes at module load."""
+    from apps.fes.tasks import compute_session_fes
+
+    return compute_session_fes
+
 MAX_BATCH_SIZE = 200
 
 
@@ -38,13 +45,28 @@ def _ingest_events(session: BehaviourSession, student_id: str, events) -> list[B
 
 
 class SessionStartView(APIView):
-    """Open a behavioural session for the authenticated student (FR02)."""
+    """Open a behavioural session for the authenticated student (FR02).
+
+    Single-session invariant: a new start force-completes the student's
+    previous active session(s) first. Duplicate client starts (React
+    StrictMode double-mount, retried requests, two tabs) previously left the
+    losers open forever as orphans: event batches resolve to the newest
+    active session, so the orphan's events were lost to FES and the student's
+    dashboard stayed empty (no completed session -> no FESScore row).
+    """
 
     def post(self, request):
+        now = datetime.utcnow()
+        for stale in BehaviourSession.objects(student=request.user.student_id, status="active"):
+            stale.status = "completed"
+            stale.ended_at = now
+            stale.save()
+            _fes_task().delay(str(stale.pk))  # late aggregates from its events
+
         session = BehaviourSession(
             student=request.user.student_id,
             status="active",
-            started_at=datetime.utcnow(),
+            started_at=now,
             source="collector",
         ).save()
         return Response(
@@ -112,9 +134,7 @@ class SessionEndView(APIView):
         session.ended_at = datetime.utcnow()
         session.save()
 
-        from apps.fes.tasks import compute_session_fes
-
-        compute_session_fes.delay(str(session.pk))
+        _fes_task().delay(str(session.pk))
         return Response(
             {"session_id": str(session.pk), "ended_at": session.ended_at, "fes_queued": True}
         )
