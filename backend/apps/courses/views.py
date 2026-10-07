@@ -9,6 +9,7 @@ from rest_framework.views import APIView
 
 from ..collector.models import BehaviourSession
 from ..collector.services import get_active_session
+from ..accounts.throttling import check_throttle
 from .models import Course, Quiz, QuizAttempt
 
 # Item ids are question indices: "q0", "q1", ... (bounded so a hand-crafted
@@ -104,6 +105,10 @@ class QuizAttemptView(APIView):
     """
 
     def post(self, request, quiz_id):
+        throttled = check_throttle(request, "quiz_attempt")
+        if throttled is not None:
+            return throttled
+
         quiz = _get_quiz_or_404(quiz_id)
         if quiz is None:
             return Response({"detail": "Quiz not found"}, status=404)

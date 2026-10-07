@@ -13,6 +13,7 @@ from mongoengine import connection
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.accounts.throttling import check_throttle
 from careermind_ml.rl.environment import ACTION_NAMES
 
 from .models import RLTransition
@@ -118,6 +119,10 @@ class RLActionView(APIView):
     pre-trained DQN over the 17-dim state; logs the RLTransition."""
 
     def post(self, request):
+        throttled = check_throttle(request, "rl_action")
+        if throttled is not None:
+            return throttled
+
         try:
             agent = _get_agent()
         except FileNotFoundError:

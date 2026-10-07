@@ -34,7 +34,7 @@ const COMMON_SKILLS = [
 
 export default function QuizPage() {
   const loggedIn = isLoggedIn();
-  const { track } = useTracking();
+  const { track, closeResource } = useTracking();
   const [active, setActive] = useState<ActiveQuiz | null>(null);
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [results, setResults] = useState<Record<number, boolean> | null>(null);
@@ -79,6 +79,10 @@ export default function QuizPage() {
         skill: aiSkill.trim(),
         difficulty: aiDifficulty,
         n_items: aiItems,
+      });
+      track("resource_open", {
+        resource_id: payload.quiz_id,
+        metadata: { resource_type: "quiz" },
       });
       setActive({
         quiz_id: payload.quiz_id,
@@ -141,6 +145,9 @@ export default function QuizPage() {
       setResults(outcome); // still show local scoring for what got through
     } finally {
       track("task_complete", { metadata: { quiz_id: active.quiz_id } });
+      // the attempt stream is over: close the visit so its dwell covers the
+      // working time (a resource_close is required for DFET/LRDS to see it)
+      closeResource("quiz_submitted");
       setSubmitting(false);
     }
   };
@@ -180,6 +187,7 @@ export default function QuizPage() {
             <Button
               variant="secondary"
               onClick={() => {
+                closeResource("quiz_exit");
                 setActive(null);
                 setAnswers({});
                 setResults(null);
@@ -242,6 +250,10 @@ export default function QuizPage() {
               <Button
                 variant="secondary"
                 onClick={() => {
+                  track("resource_open", {
+                    resource_id: active.quiz_id,
+                    metadata: { resource_type: "quiz" },
+                  });
                   setAnswers({});
                   setResults(null);
                 }}

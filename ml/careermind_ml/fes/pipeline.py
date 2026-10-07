@@ -38,6 +38,7 @@ from .submetrics import (
     task_completion_rate,
 )
 from .weights import (
+    SESSION_LOCAL_SUBMETRICS,
     SUBMETRICS,
     calibrate_population_weights,
     calibrate_student_weights,
@@ -233,6 +234,11 @@ def run_pipeline(
             row["weights"] for row in fes_weight_rows if row["student"] == student
         )
         for session, metrics in computed:
+            if all(metrics.get(m) is None for m in SESSION_LOCAL_SUBMETRICS):
+                # signal-less session: no session-local sub-metric at all, so
+                # Eq. 1 would collapse onto SCI (mirrors the live-task guard
+                # in apps.fes.tasks.compute_session_fes) — skip the row
+                continue
             fes = compute_fes(metrics, weights)
             if fes is None:
                 continue

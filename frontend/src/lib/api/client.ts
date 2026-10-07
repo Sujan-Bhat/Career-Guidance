@@ -108,7 +108,9 @@ export const endpoints = {
   },
   fes: {
     current: () => api.get("/api/v1/fes/current"),
-    history: () => api.get("/api/v1/fes/history"),
+    /** FES + the five sub-metrics per session, oldest to newest (server caps `limit` at 200). */
+    history: (limit?: number) =>
+      api.get("/api/v1/fes/history", limit ? { params: { limit } } : undefined),
     submetrics: () => api.get("/api/v1/fes/submetrics"),
   },
   recommendations: {

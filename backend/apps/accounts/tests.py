@@ -278,3 +278,103 @@ def test_lockout_expires_after_window(api):
     assert _login(api, REGISTER["email"], REGISTER["password"]).status_code == 429
     time.sleep(2.1)  # window is 2s; cache expiry is checked lazily
     assert _login(api, REGISTER["email"], REGISTER["password"]).status_code == 200
+
+
+
+
+# ---------------------------------------------------------------------------
+# Generic request caps: register / rl action / quiz attempt (security review)
+# ---------------------------------------------------------------------------
+
+from rest_framework.test import APIClient  # noqa: E402
+from .auth import mint_tokens  # noqa: E402
+from apps.rl_feedback.models import RLTransition  # noqa: E402
+
+
+def _register_n(api, n):
+    """Register `n` distinct accounts from the test client's fixed IP."""
+    for i in range(n):
+        response = api.post(
+            "/api/v1/accounts/register",
+            {**REGISTER, "email": f"cap{i}@test.local"},
+            format="json",
+        )
+        assert response.status_code == 201
+
+
+@override_settings(REGISTER_THROTTLE_LIMIT=3, REGISTER_THROTTLE_WINDOW_SECONDS=3600)
+def test_register_throttled_after_limit(api):
+    """After REGISTER_THROTTLE_LIMIT registrations from one IP inside the
+    window, the next signup is a 429 — mass signup cannot run at full speed."""
+    _register_n(api, 3)
+    response = api.post(
+        "/api/v1/accounts/register",
+        {**REGISTER, "email": "over@cap.test.local"},
+        format="json",
+    )
+    assert response.status_code == 429
+    assert "Too many" in response.data["detail"]
+
+
+@override_settings(REQUEST_THROTTLE_LIMIT=2, REQUEST_THROTTLE_WINDOW_SECONDS=60)
+def test_rl_action_throttled(registered, monkeypatch):
+    """After REQUEST_THROTTLE_LIMIT RL actions the next one is a 429 and the
+    transition log stays untouched."""
+    from careermind_ml.rl.dqn import DQNAgent
+
+    monkeypatch.setattr("apps.rl_feedback.views._agent", DQNAgent({}))
+    client, user = registered
+    for _ in range(2):
+        assert client.post("/api/v1/rl/action").status_code == 200
+    response = client.post("/api/v1/rl/action")
+    assert response.status_code == 429
+    assert RLTransition.objects(student=user["student_id"]).count() == 2
+
+
+@override_settings(REQUEST_THROTTLE_LIMIT=2, REQUEST_THROTTLE_WINDOW_SECONDS=60)
+def test_quiz_attempt_throttled(registered):
+    """Quiz attempts share the generic cap; over-limit posts are rejected
+    before any write, so session counters cannot be inflated."""
+    client, _ = registered
+    from apps.courses.models import Quiz
+    from apps.collector.models import BehaviourSession
+
+    quiz = Quiz(
+        skill="dsa",
+        title="Throttle quiz",
+        questions=[{"question": "Q?", "options": ["a", "b"], "answer": 0, "difficulty": 1}],
+    ).save()
+    session_id = client.post("/api/v1/collector/sessions/start").data["session_id"]
+
+    for _ in range(2):
+        response = client.post(
+            f"/api/v1/courses/quizzes/{quiz.pk}/attempt",
+            {"item_id": "q0", "selected": -1},
+            format="json",
+        )
+        assert response.status_code == 201
+    response = client.post(
+        f"/api/v1/courses/quizzes/{quiz.pk}/attempt",
+        {"item_id": "q0", "selected": -1},
+        format="json",
+    )
+    assert response.status_code == 429
+    session = BehaviourSession.objects(pk=session_id).first()
+    assert session.quiz_items == 2  # the 429'd attempt wrote nothing
+
+
+@override_settings(REQUEST_THROTTLE_LIMIT=2, REQUEST_THROTTLE_WINDOW_SECONDS=60)
+def test_throttle_buckets_are_scoped_per_student(registered):
+    """One student exhausting the request cap never throttles another."""
+    client, _ = registered
+    second = APIClient()
+    reg = second.post(
+        "/api/v1/accounts/register",
+        {**REGISTER, "email": "second@test.local"},
+        format="json",
+    )
+    assert reg.status_code == 201
+    second.credentials(HTTP_AUTHORIZATION=f"Bearer {reg.data['access']}")
+    for _ in range(2):
+        assert client.post("/api/v1/rl/action").status_code == 200
+    assert second.post("/api/v1/rl/action").status_code == 200

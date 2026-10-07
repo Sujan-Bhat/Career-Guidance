@@ -30,14 +30,23 @@ export type TrackEvent = {
 
 const FLUSH_INTERVAL_MS = 10_000;
 const FLUSH_THRESHOLD = 20;
+// StrictMode's mount → cleanup → remount cycle is synchronous; delaying the
+// session start past it means the double-mount never creates (and immediately
+// closes) a phantom sub-second session that would pollute FES history.
+const SESSION_START_DELAY_MS = 200;
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 type TrackingContextValue = {
   track: (type: TrackEvent["type"], payload?: Omit<TrackEvent, "type" | "timestamp">) => void;
+  /** Close the currently open resource visit (if any), emitting resource_close. */
+  closeResource: (reason?: string) => void;
 };
 
-const TrackingContext = createContext<TrackingContextValue>({ track: () => {} });
+const TrackingContext = createContext<TrackingContextValue>({
+  track: () => {},
+  closeResource: () => {},
+});
 
 export function useTracking() {
   return useContext(TrackingContext);
@@ -65,12 +74,20 @@ export function useTracking() {
  *  - On unload / teardown the buffered batch is delivered in the same
  *    keepalive request that ends the session, using the bearer token the
  *    session was opened with so logout can still close it server-side.
+ *  - Resource visits are paired: `track("resource_open")` records the open
+ *    resource and a `resource_close` is auto-emitted on the next page_view,
+ *    on teardown/unload, or via closeResource() — without a close event the
+ *    backend's aggregate pass dropped the visit entirely and DFET/LRDS were
+ *    never computed for live sessions.
+ *  - The session start is debounced past StrictMode's synchronous double
+ *    mount, so dev remounts no longer create sub-second phantom sessions.
  */
 export function TrackingProvider({ children }: { children: React.ReactNode }) {
   const queue = useRef<TrackEvent[]>([]);
   const sessionId = useRef<string | null>(null);
   const sessionToken = useRef<string | null>(null);
   const flushing = useRef(false);
+  const openResource = useRef<{ resource_id?: string; resource_type?: string } | null>(null);
 
   const authVersion = useSyncExternalStore(subscribeAuth, getAuthVersion, getAuthVersion);
 
@@ -102,30 +119,68 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
     }
   }, [sendEvents]);
 
+  const closeResource = useCallback(
+    (reason?: string) => {
+      const open = openResource.current;
+      if (!open) return;
+      openResource.current = null;
+      queue.current.push({
+        type: "resource_close",
+        resource_id: open.resource_id,
+        metadata: {
+          ...(open.resource_type ? { resource_type: open.resource_type } : {}),
+          closed_reason: reason ?? "explicit",
+        },
+        timestamp: new Date().toISOString(),
+      });
+      if (queue.current.length >= FLUSH_THRESHOLD) void flush();
+    },
+    [flush],
+  );
+
   const track = useCallback<TrackingContextValue["track"]>((type, payload) => {
+    // navigating away closes any open visit before the page_view lands,
+    // so dwell is bounded by the time actually spent on the resource
+    if (type === "page_view") closeResource("navigation");
+    if (type === "resource_open") {
+      openResource.current = {
+        resource_id: payload?.resource_id,
+        resource_type:
+          typeof payload?.metadata?.resource_type === "string"
+            ? payload.metadata.resource_type
+            : undefined,
+      };
+    } else if (type === "resource_close") {
+      openResource.current = null;
+    }
     queue.current.push({ type, ...payload, timestamp: new Date().toISOString() });
     if (queue.current.length >= FLUSH_THRESHOLD) void flush();
-  }, [flush]);
+  }, [flush, closeResource]);
 
   // open a session on mount/auth change; close it on unload or auth change
   useEffect(() => {
     if (!isLoggedIn()) return;
 
     let cancelled = false;
-    endpoints.collector
-      .startSession()
-      .then(({ data }) => {
-        if (cancelled) {
-          // effect already tore down: close the session we just opened so it
-          // doesn't linger as "active" forever (StrictMode double-mount, or a
-          // logout that raced this request)
-          void endpoints.collector.endSession(data.session_id).catch(() => {});
-          return;
-        }
-        sessionId.current = data.session_id;
-        sessionToken.current = window.localStorage.getItem("cm_access_token");
-      })
-      .catch(() => {});
+    let startTimer: ReturnType<typeof setTimeout> | undefined;
+    // Debounced so StrictMode's synchronous remount cancels the timer before
+    // any request is sent — no phantom session is created in dev.
+    startTimer = setTimeout(() => {
+      if (cancelled) return;
+      endpoints.collector
+        .startSession()
+        .then(({ data }) => {
+          if (cancelled) {
+            // effect already tore down: close the session we just opened so it
+            // doesn't linger as "active" forever (a logout that raced this request)
+            void endpoints.collector.endSession(data.session_id).catch(() => {});
+            return;
+          }
+          sessionId.current = data.session_id;
+          sessionToken.current = window.localStorage.getItem("cm_access_token");
+        })
+        .catch(() => {});
+    }, SESSION_START_DELAY_MS);
 
     const endSession = (finalBatch: TrackEvent[], token: string | null) => {
       const id = sessionId.current;
@@ -141,6 +196,7 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
     };
 
     const onUnload = () => {
+      closeResource("unload");
       const finalBatch = queue.current.splice(0, queue.current.length);
       endSession(finalBatch, sessionToken.current);
     };
@@ -149,15 +205,15 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
     const interval = setInterval(() => void flush(), FLUSH_INTERVAL_MS);
     return () => {
       cancelled = true;
+      clearTimeout(startTimer);
       clearInterval(interval);
       window.removeEventListener("beforeunload", onUnload);
-      // Route-level unmount / logout: flush what we have and close the
-      // session through the API. beforeunload covers real tab closes.
+      // Route-level unmount / logout: close any open resource, then deliver
+      // the tail batch together with the session end (one ordered request)
+      // through the API. beforeunload covers real tab closes.
+      closeResource("teardown");
       const finalBatch = queue.current.splice(0, queue.current.length);
-      if (finalBatch.length && sessionId.current) {
-        void sendEvents(finalBatch, sessionToken.current);
-      }
-      if (sessionId.current) endSession([], sessionToken.current);
+      if (sessionId.current) endSession(finalBatch, sessionToken.current);
       sessionId.current = null;
       sessionToken.current = null;
       flushing.current = false;
@@ -165,5 +221,5 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authVersion]);
 
-  return <TrackingContext.Provider value={{ track }}>{children}</TrackingContext.Provider>;
+  return <TrackingContext.Provider value={{ track, closeResource }}>{children}</TrackingContext.Provider>;
 }

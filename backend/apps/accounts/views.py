@@ -8,7 +8,7 @@ from rest_framework.views import APIView
 
 from .auth import hash_password, mint_tokens, needs_rehash, verify_password, decode_token
 from .models import StudentProfile
-from .throttling import client_ip, is_locked_out, register_failure, reset_failures
+from .throttling import check_throttle, client_ip, is_locked_out, register_failure, reset_failures
 from .serializers import (
     LoginSerializer,
     ProfileSerializer,
@@ -36,6 +36,9 @@ class RegisterView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        throttled = check_throttle(request, "register")
+        if throttled is not None:
+            return throttled
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data

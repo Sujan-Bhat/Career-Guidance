@@ -127,6 +127,24 @@ def recompute_session_aggregates(session: BehaviourSession) -> BehaviourSession:
             visit_idle_seconds += _gap_seconds(idle_since, event.timestamp)
             idle_since = None
 
+    if open_at is not None:
+        # Session ended with the resource still open (no resource_close and no
+        # follow-up resource_open): close it implicitly at the last event so
+        # the visit's dwell still counts toward DFET/LRDS. Without this the
+        # single open in a session was dropped entirely and live sessions
+        # could never produce those two sub-metrics.
+        if idle_since is not None:
+            visit_idle_seconds += _gap_seconds(idle_since, last)
+        dwell = _gap_seconds(open_at, last)
+        resource_visits.append(
+            {
+                "type": visit_type,
+                "dwell_seconds": dwell,
+                "idle_gap_seconds": min(visit_idle_seconds, dwell),
+                "rapid_switch": visit_rapid,
+            }
+        )
+
     # quiz aggregates from structured attempts (FR04)
     from apps.courses.models import QuizAttempt
 

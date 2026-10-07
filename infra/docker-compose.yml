@@ -25,9 +25,13 @@ services:
     build:
       context: ..
       dockerfile: backend/Dockerfile
-    command: python manage.py runserver 0.0.0.0:8000
+    # Dockerfile default is gunicorn + config.settings.prod; command/DEBUG
+    # overrides here pin the stack to the audited prod configuration.
+    command: gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 120
     env_file: ../.env
     environment:
+      DJANGO_SETTINGS_MODULE: config.settings.prod
+      DEBUG: "False"
       MONGO_URI: mongodb://mongo:27017
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
@@ -48,6 +52,7 @@ services:
     command: celery -A config worker -l info
     env_file: ../.env
     environment:
+      DJANGO_SETTINGS_MODULE: config.settings.prod
       MONGO_URI: mongodb://mongo:27017
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
@@ -65,6 +70,7 @@ services:
     command: celery -A config beat -l info
     env_file: ../.env
     environment:
+      DJANGO_SETTINGS_MODULE: config.settings.prod
       MONGO_URI: mongodb://mongo:27017
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1

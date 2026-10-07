@@ -79,6 +79,169 @@ def test_load_config_honours_a_custom_path(tmp_path):
     assert loaded["weight_calibration"]["min_graded_outcomes"] == 2
 
 
+def test_session_without_session_local_signals_is_skipped():
+    """A session carrying no task/resource/quiz signal (phantom StrictMode
+    close, page_view-only browse) must NOT produce a FESScore row: Eq. 1
+    would collapse onto SCI alone (FES == SCI) and that row would shadow
+    real readings as the dashboard's "latest", showing dashes for every
+    other sub-metric."""
+    from apps.accounts.models import StudentProfile
+    from apps.collector.models import BehaviourEvent, BehaviourSession
+    from apps.fes.models import FESScore
+    from apps.fes.tasks import compute_session_fes
+
+    profile = StudentProfile(
+        email="skip@test.local",
+        full_name="Skip Student",
+        password_hash="x",
+        source="careermind",
+    ).save()
+
+    # an earlier real session so the SCI window has >= 2 sessions
+    earlier = datetime.utcnow() - timedelta(minutes=20)
+    BehaviourSession(
+        student=profile.student_id,
+        status="completed",
+        source="collector",
+        started_at=earlier,
+        ended_at=earlier + timedelta(minutes=5),
+        duration_minutes=5.0,
+        login_minute_of_day=earlier.hour * 60 + earlier.minute,
+        date=earlier.date().isoformat(),
+    ).save()
+
+    base = datetime.utcnow() - timedelta(minutes=5)
+    session = BehaviourSession(
+        student=profile.student_id,
+        status="active",
+        started_at=base,
+        source="collector",
+    ).save()
+    BehaviourEvent.objects.insert(
+        [
+            BehaviourEvent(
+                session=str(session.pk),
+                student=profile.student_id,
+                type="page_view",
+                timestamp=base + timedelta(minutes=1),
+            )
+        ]
+    )
+
+    result = compute_session_fes(str(session.pk))
+    assert result["status"] == "skipped_no_signals"
+    # SCI was computable — the skip is driven by the session-local four
+    assert result["metrics"]["sci"] is not None
+    for metric in ("tcr", "dfet", "qap", "lrds"):
+        assert result["metrics"][metric] is None
+    assert FESScore.objects(session=f"{profile.student_id}:{session.pk}").count() == 0
+
+
+def test_sci_window_excludes_sub_minute_sessions():
+    """Sub-second phantom sessions (StrictMode double-mount closes) must stay
+    out of the SCI window: their ~0 durations explode CV(duration) and drag
+    SCI toward its floor."""
+    from apps.accounts.models import StudentProfile
+    from apps.collector.models import BehaviourSession
+    from apps.fes.tasks import _sci_window_sessions
+
+    profile = StudentProfile(
+        email="window@test.local",
+        full_name="Window Student",
+        password_hash="x",
+        source="careermind",
+    ).save()
+
+    now = datetime.utcnow().replace(microsecond=0)
+    phantom = BehaviourSession(
+        student=profile.student_id,
+        status="completed",
+        source="collector",
+        started_at=now - timedelta(minutes=3),
+        ended_at=now - timedelta(minutes=3) + timedelta(seconds=1),
+        duration_minutes=0.003,
+        login_minute_of_day=600,
+        date=now.date().isoformat(),
+    ).save()
+    real = BehaviourSession(
+        student=profile.student_id,
+        status="completed",
+        source="collector",
+        started_at=now - timedelta(minutes=10),
+        ended_at=now - timedelta(minutes=2),
+        duration_minutes=8.0,
+        login_minute_of_day=610,
+        date=now.date().isoformat(),
+    ).save()
+    target = BehaviourSession(
+        student=profile.student_id,
+        status="active",
+        started_at=now,
+        source="collector",
+    ).save()
+
+    window = _sci_window_sessions(profile.student_id, target)
+    assert [s.pk for s in window] == [real.pk]
+    assert phantom.pk not in [s.pk for s in window]
+
+
+def test_fes_endpoints_fall_back_past_signal_less_rows(registered):
+    """Legacy signal-less rows (written before the skip guard) must never
+    shadow a real reading: /fes/current and the trend serve the newest row
+    WITH signal, and /fes/submetrics serves each metric's most recent
+    non-null value with its as-of timestamp."""
+    from apps.fes.models import FESScore
+
+    client, user = registered
+    student = user["student_id"]
+    weights = {"tcr": 0.2, "sci": 0.2, "dfet": 0.2, "qap": 0.2, "lrds": 0.2}
+
+    rich_at = (datetime.utcnow() - timedelta(hours=2)).replace(microsecond=0)
+    FESScore(
+        session=f"{student}:rich",
+        student=student,
+        tcr=0.5,
+        sci=0.6,
+        dfet=0.4,
+        qap=0.3,
+        lrds=0.2,
+        fes=0.45,
+        weights=weights,
+        computed_at=rich_at,
+    ).save()
+
+    degenerate_at = datetime.utcnow().replace(microsecond=0)
+    FESScore(
+        session=f"{student}:phantom",
+        student=student,
+        tcr=None,
+        sci=0.3,
+        dfet=None,
+        qap=None,
+        lrds=None,
+        fes=0.3,
+        weights=weights,
+        computed_at=degenerate_at,
+    ).save()
+
+    current = client.get("/api/v1/fes/current")
+    assert current.status_code == 200
+    assert current.data["fes"] == 0.45  # skips the degenerate newest row
+    assert current.data["tcr"] == 0.5
+
+    sub = client.get("/api/v1/fes/submetrics")
+    assert sub.status_code == 200
+    assert sub.data["submetrics"]["tcr"] == {"value": 0.5, "as_of": rich_at}
+    assert sub.data["submetrics"]["sci"] == {"value": 0.3, "as_of": degenerate_at}
+    assert sub.data["latest"]["computed_at"] == degenerate_at
+    assert "tcr" in sub.data["latest"]["missing"]
+    assert sub.data["student_weights"] == weights
+
+    history = client.get("/api/v1/fes/history")
+    assert history.status_code == 200
+    assert history.data["count"] == 1  # degenerate row excluded from the trend
+
+
 def test_recalibration_task_is_scheduled():
     """The nightly job must actually be wired: CELERY_BEAT_SCHEDULE in
     settings + the task name registered by @shared_task."""
@@ -134,3 +297,82 @@ def test_recompute_all_weights_is_non_destructive(monkeypatch):
     assert summary["weights_upserted"] == 1  # the population row only
     assert calls["upserts"] == 1
     assert calls["delete_many"] == 0
+
+
+def test_history_rows_carry_sub_metrics_for_the_metrics_page(registered):
+    """The metrics page charts the sub-metric history straight from the DB, so
+    /fes/history must serve each row's five sub-metrics (null where that session
+    recorded no such activity), the composite, and the weight vector applied --
+    not just the composite the 14-day trend stuck with."""
+    from apps.fes.models import FESScore
+
+    client, user = registered
+    student = user["student_id"]
+    weights = {"tcr": 0.4, "sci": 0.1, "dfet": 0.2, "qap": 0.2, "lrds": 0.1}
+    first = (datetime.utcnow() - timedelta(hours=3)).replace(microsecond=0)
+    second = (datetime.utcnow() - timedelta(hours=1)).replace(microsecond=0)
+
+    FESScore(
+        session=f"{student}:metrics1",
+        student=student,
+        tcr=0.5,
+        sci=0.6,
+        dfet=0.4,
+        qap=None,  # no quiz that session
+        lrds=0.2,
+        fes=0.45,
+        weights=weights,
+        computed_at=first,
+    ).save()
+    FESScore(
+        session=f"{student}:metrics2",
+        student=student,
+        tcr=0.8,
+        sci=0.7,
+        dfet=0.6,
+        qap=0.3,
+        lrds=0.5,
+        fes=0.68,
+        weights=weights,
+        computed_at=second,
+    ).save()
+
+    response = client.get("/api/v1/fes/history")
+    assert response.status_code == 200
+    rows = response.data["history"]
+    assert [r["fes"] for r in rows] == [0.45, 0.68]  # chronological
+    assert rows[0]["qap"] is None  # a missing metric is a gap, never a zero
+    assert rows[1]["qap"] == 0.3
+    assert rows[1]["tcr"] == 0.8
+    assert rows[1]["weights"] == weights
+    assert rows[1]["session"].endswith(":metrics2")
+
+
+def test_history_limit_is_capped_and_keeps_the_newest_rows(registered):
+    """`limit` must clamp at 200 and keep the NEWEST rows (the old ascending
+    sort + limit returned the oldest ones)."""
+    from apps.fes.models import FESScore
+
+    client, user = registered
+    student = user["student_id"]
+    weights = {"tcr": 0.2, "sci": 0.2, "dfet": 0.2, "qap": 0.2, "lrds": 0.2}
+    for index in range(3):
+        FESScore(
+            session=f"{student}:limit{index}",
+            student=student,
+            tcr=0.1 * index,
+            sci=0.5,
+            dfet=0.5,
+            qap=None,
+            lrds=0.5,
+            fes=0.3 + 0.05 * index,
+            weights=weights,
+            computed_at=(datetime.utcnow() - timedelta(hours=3 - index)).replace(microsecond=0),
+        ).save()
+
+    two = client.get("/api/v1/fes/history?limit=2")
+    assert two.data["count"] == 2
+    assert [r["fes"] for r in two.data["history"]] == [0.35, 0.40]  # newest two, oldest->newest
+
+    assert client.get("/api/v1/fes/history?limit=9999").data["count"] == 3
+    assert client.get("/api/v1/fes/history?limit=nonsense").data["count"] == 3

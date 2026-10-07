@@ -20,6 +20,8 @@ frontend/.env.local
 
 # Data & artifacts
 data/oulad/raw/
+# Regenerable simulation report (recreate with `make simulate-fes-html`)
+frontend/public/fes-simulation.html
 ml/artifacts/*.pt
 ml/artifacts/*.json
 ml/artifacts/*.joblib

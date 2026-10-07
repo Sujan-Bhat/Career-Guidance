@@ -18,7 +18,7 @@ from careermind_ml.fes.submetrics import (
     session_consistency_index,
     task_completion_rate,
 )
-from careermind_ml.fes.weights import SUBMETRICS, compute_fes
+from careermind_ml.fes.weights import SESSION_LOCAL_SUBMETRICS, SUBMETRICS, compute_fes
 
 from ..collector.models import BehaviourSession
 from ..collector.services import recompute_session_aggregates
@@ -40,6 +40,26 @@ def _weights_for(student_id: str) -> dict:
     return weights.weights
 
 
+def _sci_window_sessions(student_id: str, session) -> list:
+    """This student's sessions in the trailing SCI window, newest eligible
+    session included.
+
+    Sessions shorter than a minute are excluded: they are process artifacts
+    (React StrictMode double-mount closing the session it just opened,
+    route-churn auto-closes), not behaviour — leaving them in the window
+    destroys CV(duration) and drags SCI toward its floor.
+    """
+    window_start = session.started_at - timedelta(days=CONFIG["sci_window_days"])
+    return list(
+        BehaviourSession.objects(
+            student=student_id,
+            started_at__gte=window_start,
+            started_at__lte=session.started_at,
+            duration_minutes__gte=1,
+        ).order_by("started_at")
+    )
+
+
 @shared_task(name="fes.compute_session_fes")
 def compute_session_fes(session_id: str) -> dict:
     session = BehaviourSession.objects(pk=session_id).first()
@@ -50,14 +70,7 @@ def compute_session_fes(session_id: str) -> dict:
         session = recompute_session_aggregates(session)  # raw events -> aggregates
 
     # SCI window: this student's sessions in the trailing 14 days
-    window_start = session.started_at - timedelta(days=CONFIG["sci_window_days"])
-    window = list(
-        BehaviourSession.objects(
-            student=session.student,
-            started_at__gte=window_start,
-            started_at__lte=session.started_at,
-        ).order_by("started_at")
-    )
+    window = _sci_window_sessions(session.student, session)
 
     session_dict = session.to_mongo().to_dict()
     metrics = {
@@ -80,12 +93,25 @@ def compute_session_fes(session_id: str) -> dict:
             session_dict.get("resource_visits") or [], CONFIG["lrds_thresholds"]
         ),
     }
+    # Signal-less session (phantom StrictMode close, page_view-only browse):
+    # every session-local sub-metric is missing, so Eq. 1 would collapse onto
+    # SCI alone (FES == SCI) and this row would shadow real readings as the
+    # dashboard's "latest". Skip it — idempotently, so a recompute also drops
+    # any row a previous run wrote before this guard existed.
+    key = f"{session.student}:{session.pk}"
+    if all(metrics.get(m) is None for m in SESSION_LOCAL_SUBMETRICS):
+        FESScore.objects(session=key).delete()
+        return {
+            "status": "skipped_no_signals",
+            "session_id": session_id,
+            "metrics": metrics,
+        }
+
     weights = _weights_for(session.student)
     fes = compute_fes(metrics, weights)
     if fes is None:
         return {"status": "no_metrics", "session_id": session_id, "metrics": metrics}
 
-    key = f"{session.student}:{session.pk}"
     FESScore.objects(session=key).delete()  # idempotent on recompute
     FESScore(
         session=key,

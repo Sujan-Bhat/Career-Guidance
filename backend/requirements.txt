@@ -1,5 +1,6 @@
 Django>=5.0,<5.1
 djangorestframework>=3.14
+gunicorn>=21.2
 mongoengine>=0.27
 pymongo>=4.6
 celery>=5.3
@@ -9,5 +10,10 @@ PyYAML>=6.0
 PyJWT>=2.8
 bcrypt>=4.1
 numpy>=1.26
+# Provider SDKs for the careermind-llm gateway (matches its [providers] extra).
+# The gateway imports them lazily per provider, but which one is needed is a
+# runtime env choice (LLM_PROVIDER), so local setup must have them all.
+openai>=1.30
+google-generativeai>=0.7
 pytest>=7.4
 pytest-django>=4.7

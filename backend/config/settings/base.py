@@ -6,6 +6,10 @@ from pathlib import Path
 import mongoengine
 from celery.schedules import crontab
 
+# test.py imports dev.py imports base.py — the auth layer only ever calls
+# os.getenv at import time and the test DB connection is re-pointed there.
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.dev")
+
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 
@@ -94,11 +98,17 @@ CACHES = {
     )
 }
 
-# --- Login throttling (apps.accounts.throttling) ---
-# Failed (email, IP) attempts inside the window lock that pair out until the
-# window expires; a successful login resets the counter.
+# --- Throttling (apps.accounts.throttling) ---
+# Login: failed (email, IP) attempts inside the window lock that pair out
+# until the window expires; a successful login resets the counter.
 LOGIN_FAILURE_LIMIT = 10
 LOGIN_LOCKOUT_WINDOW_SECONDS = 900
+# Generic per-(scope, identity) caps for state-changing POSTs. Identity is the
+# JWT subject when authenticated, else the client IP (e.g. register).
+REQUEST_THROTTLE_LIMIT = 60
+REQUEST_THROTTLE_WINDOW_SECONDS = 60
+REGISTER_THROTTLE_LIMIT = 10
+REGISTER_THROTTLE_WINDOW_SECONDS = 3600
 
 # --- Celery (async jobs: session-end FES computation, weight recalibration) ---
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")

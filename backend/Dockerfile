@@ -15,9 +15,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # package source (ml/configs, ml/artifacts), which the backend reads at runtime
 COPY ml ml
 COPY llm_gateway llm_gateway
+# [providers] extra pins the SDK set (openai + anthropic + google-generativeai);
+# the gateway imports whichever LLM_PROVIDER selects at runtime.
 RUN pip install --no-cache-dir -e ml && \
-    pip install --no-cache-dir -e llm_gateway && \
-    pip install --no-cache-dir openai google-generativeai
+    pip install --no-cache-dir -e "llm_gateway[providers]"
 
 # knowledge-graph seed + Mongo seeder (first run: python /app/data/seeds/seed_mongo.py)
 COPY data data
@@ -27,4 +28,7 @@ WORKDIR /app/backend
 
 EXPOSE 8000
 
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+# Production: gunicorn under config.settings.prod (DEBUG=False, import-time
+# failure when DJANGO_SECRET_KEY / DJANGO_ALLOWED_HOSTS are unset).
+ENV DJANGO_SETTINGS_MODULE=config.settings.prod
+CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3", "--timeout", "120"]

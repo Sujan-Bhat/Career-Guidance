@@ -201,3 +201,43 @@ def test_idle_gap_never_exceeds_dwell(registered):
     assert second["idle_gap_seconds"] == pytest.approx(60.0)
     for visit in session.resource_visits:
         assert visit["idle_gap_seconds"] <= visit["dwell_seconds"]
+
+
+def test_unclosed_visit_is_flushed_at_session_end(registered):
+    """A session whose last resource event is `resource_open` (no close, no
+    follow-up open) must still record the visit: dwell closes implicitly at
+    the last event. Without the flush, live sessions dropped the visit
+    entirely and DFET/LRDS could never be computed."""
+    client, _ = registered
+    session_id = client.post("/api/v1/collector/sessions/start").data["session_id"]
+
+    base = datetime.utcnow() + timedelta(seconds=1)
+    events = [
+        {"type": "page_view", "timestamp": base.isoformat()},
+        {
+            "type": "resource_open",
+            "resource_id": "r1",
+            "metadata": {"resource_type": "article"},
+            "timestamp": (base + timedelta(minutes=1)).isoformat(),
+        },
+        {"type": "page_view", "timestamp": (base + timedelta(minutes=3)).isoformat()},
+    ]
+    assert client.post(
+        "/api/v1/collector/events/batch",
+        {"session_id": session_id, "events": events},
+        format="json",
+    ).status_code == 200
+
+    from apps.collector.models import BehaviourSession
+    from apps.collector.services import recompute_session_aggregates
+
+    session = BehaviourSession.objects(pk=session_id).first()
+    session.started_at = base
+    session.ended_at = base + timedelta(minutes=4)
+    recompute_session_aggregates(session)
+
+    session.reload()
+    assert len(session.resource_visits) == 1
+    visit = session.resource_visits[0]
+    assert visit["dwell_seconds"] == pytest.approx(120.0)  # open +1min, last event +3min
+    assert visit["idle_gap_seconds"] <= visit["dwell_seconds"]

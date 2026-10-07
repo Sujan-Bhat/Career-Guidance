@@ -20,6 +20,14 @@ import numpy as np
 
 SUBMETRICS = ("tcr", "sci", "dfet", "qap", "lrds")
 
+# Session-local sub-metrics: computed from THIS session's aggregates only,
+# unlike SCI which is derived from a trailing multi-session window. A session
+# where all four are missing carried no behavioural signal at all (phantom
+# StrictMode session, page_view-only browse), so it must not produce an FES
+# row — its composite would just mirror SCI and win the "latest row" slot on
+# the dashboard while every other sub-metric showed as missing.
+SESSION_LOCAL_SUBMETRICS = ("tcr", "dfet", "qap", "lrds")
+
 DEFAULT_CONFIG = {
     "min_sessions": 8,
     "min_graded_outcomes": 2,

@@ -1,20 +1,43 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { endpoints, isLoggedIn } from "@/lib/api/client";
 import { Card } from "@/components/ui/Card";
 import { ScoreRing } from "@/components/ui/ScoreRing";
+import { FesReportLink } from "@/components/FesReportLink";
 
 const SUBMETRICS = [
-  { key: "tcr", label: "Task Completion Rate (TCR)" },
-  { key: "sci", label: "Session Consistency Index (SCI)" },
-  { key: "dfet", label: "Distraction-Free Engagement (DFET)" },
-  { key: "qap", label: "Quiz Attempt Persistence (QAP)" },
-  { key: "lrds", label: "Resource Depth Score (LRDS)" },
+  { key: "tcr", label: "Task Completion Rate (TCR)", activity: "task" },
+  { key: "sci", label: "Session Consistency Index (SCI)", activity: "session timing" },
+  { key: "dfet", label: "Distraction-Free Engagement (DFET)", activity: "resource" },
+  { key: "qap", label: "Quiz Attempt Persistence (QAP)", activity: "quiz" },
+  { key: "lrds", label: "Resource Depth Score (LRDS)", activity: "resource" },
 ];
 
+type SubmetricReading = { value: number; as_of: string } | null;
+type SubmetricsPayload = {
+  latest?: { computed_at: string; available: string[]; missing: string[] };
+  submetrics?: Record<string, SubmetricReading>;
+} | null;
+
+// what a session must record for each session-local sub-metric to exist
+const MISSING_ACTIVITY: Record<string, string> = {
+  tcr: "task",
+  dfet: "resource engagement",
+  qap: "quiz",
+  lrds: "resource depth",
+};
+
 export default function DashboardPage() {
-  const loggedIn = typeof window !== "undefined" && isLoggedIn();
+  // The JWT lives in localStorage, which the server cannot read. Reading it
+  // during render made the server emit the logged-out UI and the client the
+  // logged-in one, which React reports as a hydration failure and answers by
+  // re-rendering the entire root on the client. Gate on `mounted` instead so
+  // the first client render matches the server's.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const loggedIn = mounted && isLoggedIn();
   const { data, isLoading, error } = useQuery({
     queryKey: ["fes", "current"],
     queryFn: () => endpoints.fes.current(),
@@ -34,11 +57,16 @@ export default function DashboardPage() {
     queryFn: () => endpoints.fes.history(),
     enabled: loggedIn,
   });
+  const { data: subData } = useQuery({
+    queryKey: ["fes", "submetrics"],
+    queryFn: () => endpoints.fes.submetrics(),
+    enabled: loggedIn,
+  });
   const status = (error as { response?: { status?: number } } | null)?.response?.status;
 
   const fes: number | null = data && !data.data?.detail ? data.data.fes : null;
-  const submetrics: Record<string, number> | null =
-    data && !data.data?.detail ? data.data : null;
+  const breakdown: SubmetricsPayload =
+    subData && !subData.data?.detail ? subData.data : null;
 
   const history: { date: string; fes: number }[] = historyData?.data?.history ?? [];
   const trend = history.slice(-14);
@@ -46,10 +74,18 @@ export default function DashboardPage() {
   const last = trend[trend.length - 1]?.fes;
   const delta = first !== undefined && last !== undefined ? last - first : null;
 
+  const missingLocal = (breakdown?.latest?.missing ?? []).filter((k) => k in MISSING_ACTIVITY);
+  const sparseNote =
+    missingLocal.length > 0
+      ? `Latest tracked session recorded no ${missingLocal
+          .map((k) => MISSING_ACTIVITY[k])
+          .join(" / ")} activity — showing each metric's most recent reading.`
+      : null;
+
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-bold">Dashboard</h1>
-      {!loggedIn && (
+      {mounted && !loggedIn && (
         <p className="rounded border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           Viewing demo data. <a className="font-semibold underline" href="/login">Login</a> to
           track your own sessions and see your personal FES.
@@ -105,19 +141,45 @@ export default function DashboardPage() {
         </p>
       )}
       <Card title="Sub-metric breakdown (paper Sec. V-A)">
+        {sparseNote && (
+          <p className="mb-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            {sparseNote}
+          </p>
+        )}
         <ul className="grid grid-cols-2 gap-3 text-sm text-slate-700">
-          {SUBMETRICS.map((m) => (
-            <li key={m.key} className="flex items-center justify-between border-b border-slate-100 py-2">
-              <span>{m.label}</span>
-              <span className="font-mono">
-                {submetrics && submetrics[m.key] !== null && submetrics[m.key] !== undefined
-                  ? (submetrics[m.key] as number).toFixed(3)
-                  : "—"}
-              </span>
-            </li>
-          ))}
+          {SUBMETRICS.map((m) => {
+            const reading = breakdown?.submetrics?.[m.key] ?? null;
+            const stale =
+              reading &&
+              breakdown?.latest &&
+              new Date(reading.as_of).getTime() !==
+                new Date(breakdown.latest.computed_at).getTime();
+            return (
+              <li
+                key={m.key}
+                className="flex items-center justify-between border-b border-slate-100 py-2"
+              >
+                <span>{m.label}</span>
+                <span className="font-mono">
+                  {reading ? (
+                    <>
+                      {reading.value.toFixed(3)}
+                      {stale && (
+                        <span className="ml-1 font-sans text-[10px] text-slate-400">
+                          as of {String(reading.as_of).slice(0, 16).replace("T", " ")}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    "—"
+                  )}
+                </span>
+              </li>
+            );
+          })}
         </ul>
       </Card>
+      <FesReportLink className="text-xs text-slate-400" />
     </div>
   );
 }
