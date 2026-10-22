@@ -53,15 +53,20 @@ class CascadeRecommender:
         return cls(graph, cooc, fm_model, fm_spec, population_skills, config)
 
     @classmethod
-    def from_mongo(cls, uri: str = "mongodb://localhost:27017", db_name: str = "careermind", config: dict | None = None) -> "CascadeRecommender":
-        from .features import load_fm_training_data
-
-        data = load_fm_training_data(uri, db_name)
+    def from_mongo(cls, uri: str | None = None, db_name: str | None = None, config: dict | None = None) -> "CascadeRecommender":
+        import os
         from pymongo import MongoClient
 
-        client = MongoClient(uri)
+        from .features import load_fm_training_data
+
+        mongo_uri = uri or os.getenv("MONGO_URI", "mongodb://localhost:27017")
+        database_name = db_name or os.getenv("MONGO_DB_NAME", "careermind")
+
+        data = load_fm_training_data(mongo_uri, database_name)
+
+        client = MongoClient(mongo_uri)
         fes_by_session = {
-            row["session"]: row["fes"] for row in client[db_name].fes_history.find({}, {"session": 1, "fes": 1})
+            row["session"]: row["fes"] for row in client[database_name].fes_history.find({}, {"session": 1, "fes": 1})
         }
         data["fes_by_session"] = fes_by_session
         return cls.from_data(data, config)

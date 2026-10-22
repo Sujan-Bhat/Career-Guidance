@@ -37,6 +37,8 @@ services:
       CELERY_RESULT_BACKEND: redis://redis:6379/1
       REDIS_URL: redis://redis:6379/2
       FRONTEND_URL: http://localhost:3000
+    volumes:
+      - ../ml:/app/ml
     ports:
       - "8000:8000"
     depends_on:
@@ -56,6 +58,8 @@ services:
       MONGO_URI: mongodb://mongo:27017
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
+    volumes:
+      - ../ml:/app/ml
     depends_on:
       mongo:
         condition: service_healthy
@@ -74,6 +78,8 @@ services:
       MONGO_URI: mongodb://mongo:27017
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
+    volumes:
+      - ../ml:/app/ml
     depends_on:
       mongo:
         condition: service_healthy
@@ -84,7 +90,10 @@ services:
     build: ../frontend
     command: npm run dev
     environment:
+      HOSTNAME: "0.0.0.0"
       NEXT_PUBLIC_API_URL: http://localhost:8000
+    volumes:
+      - ../frontend/public:/app/public
     ports:
       - "3000:3000"
     depends_on:

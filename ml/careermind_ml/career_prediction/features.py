@@ -167,7 +167,7 @@ def build_feature_frame(
 
 # ------------------------------------------------------------- Mongo loader
 
-def load_ensemble_training_data(uri: str = "mongodb://localhost:27017", db_name: str = "careermind") -> dict:
+def load_ensemble_training_data(uri: str | None = None, db_name: str | None = None) -> dict:
     """Everything train_ensemble needs from MongoDB (pymongo, lazy import).
 
     Only profiles carrying a career_outcome label are returned (the
@@ -177,8 +177,10 @@ def load_ensemble_training_data(uri: str = "mongodb://localhost:27017", db_name:
 
     from pymongo import MongoClient
 
-    client = MongoClient(uri or os.getenv("MONGO_URI", "mongodb://localhost:27017"))
-    db = client[db_name or os.getenv("MONGO_DB_NAME", "careermind")]
+    mongo_uri = uri or os.getenv("MONGO_URI", "mongodb://localhost:27017")
+    database_name = db_name or os.getenv("MONGO_DB_NAME", "careermind")
+    client = MongoClient(mongo_uri)
+    db = client[database_name]
 
     fes_by_student: dict[str, list[tuple]] = {}
     for row in db.fes_history.find({}, {"student": 1, "fes": 1, "computed_at": 1}).sort("computed_at", 1):

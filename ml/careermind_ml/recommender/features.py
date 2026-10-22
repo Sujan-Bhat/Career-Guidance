@@ -133,14 +133,16 @@ def make_dataset(
 
 # ------------------------------------------------------------- Mongo loaders
 
-def load_fm_training_data(uri: str = "mongodb://localhost:27017", db_name: str = "careermind") -> dict:
+def load_fm_training_data(uri: str | None = None, db_name: str | None = None) -> dict:
     """Assemble everything train_fm needs from MongoDB (pymongo, lazy import)."""
     import os
 
     from pymongo import MongoClient
 
-    client = MongoClient(uri or os.getenv("MONGO_URI", "mongodb://localhost:27017"))
-    db = client[db_name or os.getenv("MONGO_DB_NAME", "careermind")]
+    mongo_uri = uri or os.getenv("MONGO_URI", "mongodb://localhost:27017")
+    database_name = db_name or os.getenv("MONGO_DB_NAME", "careermind")
+    client = MongoClient(mongo_uri)
+    db = client[database_name]
 
     interactions = list(db.interactions.find({}, {"_id": 0}))
     profiles = list(db.profiles.find({}, {"_id": 0}))

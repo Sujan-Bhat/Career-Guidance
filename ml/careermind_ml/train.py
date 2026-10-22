@@ -28,8 +28,16 @@ def main() -> int:
         import yaml
 
         config = {}
+        cfg_path = None
         if args.config:
-            with open(args.config) as fh:
+            import pathlib
+            p = pathlib.Path(args.config)
+            if not p.exists():
+                candidate = pathlib.Path(__file__).resolve().parent.parent / "configs" / p.name
+                if candidate.exists():
+                    p = candidate
+            cfg_path = p
+            with open(cfg_path) as fh:
                 config = yaml.safe_load(fh) or {}
         config = {**config.get("fm", {}), "stage1_eligibility_threshold": config.get("stage1_eligibility_threshold", 0.60)}
         data = load_fm_training_data()
@@ -47,7 +55,12 @@ def main() -> int:
 
         config = {}
         if args.config:
-            with open(args.config) as fh:
+            p = pathlib.Path(args.config)
+            if not p.exists():
+                candidate = pathlib.Path(__file__).resolve().parent.parent / "configs" / p.name
+                if candidate.exists():
+                    p = candidate
+            with open(p) as fh:
                 config = yaml.safe_load(fh) or {}
         # simulator lives outside the package (data/simulator)
         sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "data" / "simulator"))
@@ -59,6 +72,7 @@ def main() -> int:
         train_dqn(env, agent, config)
         return 0
     if args.module == "ensemble":
+        import pathlib
         import yaml
 
         from careermind_ml.career_prediction.ensemble import train_ensemble
@@ -66,7 +80,12 @@ def main() -> int:
 
         config = {}
         if args.config:
-            with open(args.config) as fh:
+            p = pathlib.Path(args.config)
+            if not p.exists():
+                candidate = pathlib.Path(__file__).resolve().parent.parent / "configs" / p.name
+                if candidate.exists():
+                    p = candidate
+            with open(p) as fh:
                 config = yaml.safe_load(fh) or {}
         data = load_ensemble_training_data()
         train_ensemble(data, config)
