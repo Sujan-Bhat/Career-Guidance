@@ -8,6 +8,7 @@ import { useProgress } from "@/lib/roadmap/ProgressStore";
 import { mergeGeneratedRoadmaps, useGeneratedRoadmaps } from "@/lib/roadmap/generated";
 import { selectTrackedRoadmaps } from "@/lib/roadmap/progress";
 import { getRoadmap } from "@/lib/roadmap/registry";
+import { activeStudentScope } from "@/lib/roadmap/scope";
 import type { Roadmap } from "@/types/roadmap";
 import { RoadmapCard } from "./RoadmapCard";
 import { RoadmapRequestBox } from "./RoadmapRequestBox";
@@ -22,7 +23,7 @@ import { RoadmapRequestBox } from "./RoadmapRequestBox";
  * another device resolve here too.
  */
 export function MyRoadmaps() {
-  const { state, remove } = useProgress();
+  const { state, remove, ensure } = useProgress();
   // Subscribing re-renders when a generated roadmap is saved (request box,
   // cross-device restore) so cards resolve without a page reload.
   useGeneratedRoadmaps();
@@ -32,7 +33,8 @@ export function MyRoadmaps() {
   const loggedIn = mounted && isLoggedIn();
 
   const { data } = useQuery({
-    queryKey: ["roadmaps", "mine"],
+    // Scoped by student so cached results never cross accounts.
+    queryKey: ["roadmaps", "mine", activeStudentScope()],
     queryFn: () => endpoints.roadmaps.mine(),
     enabled: loggedIn,
     // The list is a convenience (cross-device restore) — never block or
@@ -43,7 +45,13 @@ export function MyRoadmaps() {
   useEffect(() => {
     const roadmaps = data?.data?.roadmaps;
     if (Array.isArray(roadmaps) && roadmaps.length > 0) {
-      mergeGeneratedRoadmaps(roadmaps.map((entry) => entry.roadmap as Roadmap));
+      const fetched = roadmaps.map((entry) => entry.roadmap as Roadmap);
+      mergeGeneratedRoadmaps(fetched);
+      // Ensure each fetched roadmap appears in "My Roadmaps" (progress store)
+      // so cross-device restores show cards immediately without a page reload.
+      for (const rm of fetched) {
+        ensure(rm.slug);
+      }
     }
   }, [data]);
 
