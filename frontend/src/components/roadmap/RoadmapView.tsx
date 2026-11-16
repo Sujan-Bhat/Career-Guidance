@@ -143,7 +143,7 @@ export function RoadmapView({ slug }: { slug: string }) {
 /**
  * Friendly fallback for careers that have no seed roadmap yet: restore a
  * previously generated roadmap from the backend when logged in, and offer
- * on-demand Gemini generation otherwise (or additionally).
+ * on-demand Advanced Career Mind AI generation otherwise (or additionally).
  */
 function ComingSoon({ slug }: { slug: string }) {
   const router = useRouter();

@@ -1,11 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { endpoints, isLoggedIn } from "@/lib/api/client";
 import { useProgress } from "@/lib/roadmap/ProgressStore";
-import { mergeGeneratedRoadmaps, useGeneratedRoadmaps } from "@/lib/roadmap/generated";
+import {
+  mergeGeneratedRoadmaps,
+  removeGeneratedRoadmap,
+  useGeneratedRoadmaps,
+} from "@/lib/roadmap/generated";
 import { selectTrackedRoadmaps } from "@/lib/roadmap/progress";
 import { getRoadmap } from "@/lib/roadmap/registry";
 import { activeStudentScope } from "@/lib/roadmap/scope";
@@ -55,6 +59,36 @@ export function MyRoadmaps() {
     }
   }, [data]);
 
+  const queryClient = useQueryClient();
+  const queryKey = ["roadmaps", "mine", activeStudentScope()];
+
+  const handleRemove = async (slug: string) => {
+    // 1. Remove from local progress tracking state (instant card removal)
+    remove(slug);
+    // 2. Remove from generated roadmap localStorage mirror
+    removeGeneratedRoadmap(slug);
+    // 3. Optimistically remove from React Query cache
+    queryClient.setQueryData(queryKey, (old: unknown) => {
+      const existing = (old as { data?: { roadmaps?: Array<{ slug: string }> } })?.data?.roadmaps;
+      if (!Array.isArray(existing)) return old;
+      return {
+        ...((old as object) || {}),
+        data: {
+          ...((old as { data?: object })?.data || {}),
+          roadmaps: existing.filter((r) => r.slug !== slug),
+        },
+      };
+    });
+    // 4. Delete permanently in backend if authenticated
+    if (loggedIn) {
+      try {
+        await endpoints.roadmaps.delete(slug);
+      } catch {
+        // Ignored if curated/seed roadmap or already deleted
+      }
+    }
+  };
+
   // Recomputed on every render; the subscriptions above (
   // `useProgress` state, `generated`) are what trigger re-renders.
   const tracked = selectTrackedRoadmaps(state, getRoadmap);
@@ -62,9 +96,9 @@ export function MyRoadmaps() {
   if (tracked.length === 0) {
     return (
       <div className="flex flex-col gap-4">
-        <div className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">
+        <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900/40 p-6 text-center text-sm text-slate-400">
           No roadmaps yet. Open a career from{" "}
-          <span className="font-semibold text-slate-700">Recommendations</span>{" "}
+          <span className="font-semibold text-slate-200">Recommendations</span>{" "}
           — or request one here:
         </div>
         <RoadmapRequestBox autoFocus />
@@ -76,7 +110,7 @@ export function MyRoadmaps() {
     <div className="flex flex-col gap-5">
       <div className="grid gap-4 sm:grid-cols-2">
         {tracked.map((entry) => (
-          <RoadmapCard key={entry.slug} entry={entry} onRemove={remove} />
+          <RoadmapCard key={entry.slug} entry={entry} onRemove={handleRemove} />
         ))}
       </div>
 

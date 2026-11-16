@@ -143,6 +143,24 @@ def test_detail_scoped_to_owner(registered, monkeypatch, fake_generate):
     assert client.get("/api/v1/roadmaps/never-generated").status_code == 404
 
 
+def test_delete_scoped_to_owner(registered, monkeypatch, fake_generate):
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    client, _ = registered
+    client.post("/api/v1/roadmaps/generate", {"career": "Data Scientist"})
+
+    from .models import GeneratedRoadmap
+
+    assert GeneratedRoadmap.objects(slug="data-scientist").count() == 1
+
+    # Unowned slug deletion -> 404
+    assert client.delete("/api/v1/roadmaps/never-generated").status_code == 404
+
+    # Own slug deletion -> 200
+    res = client.delete("/api/v1/roadmaps/data-scientist")
+    assert res.status_code == 200
+    assert GeneratedRoadmap.objects(slug="data-scientist").count() == 0
+
+
 def test_generate_provider_failure_returns_502(registered, monkeypatch):
     monkeypatch.setenv("LLM_API_KEY", "test-key")
     import careermind_llm.roadmapgen as roadmapgen

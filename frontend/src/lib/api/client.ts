@@ -141,12 +141,14 @@ export const endpoints = {
       api.post("/api/v1/llm/quiz/generate", payload),
   },
   roadmaps: {
-    /** Generate (or regenerate) a roadmap for a career with Gemini. */
+    /** Generate (or regenerate) a roadmap for a career with Advanced Career Mind AI. */
     generate: (career: string, context?: string) =>
       api.post("/api/v1/roadmaps/generate", { career, context }),
     /** The student's generated roadmaps (newest first, full payloads). */
     mine: () => api.get("/api/v1/roadmaps/mine"),
     /** One generated roadmap by slug (404 when not owned/absent). */
     detail: (slug: string) => api.get(`/api/v1/roadmaps/${slug}`),
+    /** Delete a generated roadmap by slug. */
+    delete: (slug: string) => api.delete(`/api/v1/roadmaps/${slug}`),
   },
 };

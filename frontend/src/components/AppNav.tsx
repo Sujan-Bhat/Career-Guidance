@@ -56,10 +56,13 @@ export default function AppNav() {
       {/* Desktop sidebar */}
       <nav className="hidden w-60 shrink-0 flex-col gap-1 border-r border-slate-800 bg-[#0B1020] p-4 lg:sticky lg:top-0 lg:flex lg:h-screen">
         <Link
-          href="/"
-          className="mb-6 rounded-lg px-2 py-3 text-lg font-bold tracking-wide text-white"
+          href="/dashboard"
+          className="mb-6 rounded-lg px-2 py-3 text-lg font-bold tracking-wide text-white flex items-center gap-2 group"
         >
-          CAREERMIND
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-tr from-violet-600 to-cyan-500 text-xs font-black text-white shadow-md shadow-violet-500/20 group-hover:scale-105 transition-transform">
+            CM
+          </span>
+          <span>CAREERMIND</span>
         </Link>
 
         {NAV.map((item) => (
@@ -78,10 +81,13 @@ export default function AppNav() {
       {/* Mobile header */}
       <header className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-800 bg-[#0B1020] px-4 py-3 lg:hidden">
         <Link
-          href="/"
-          className="text-base font-bold tracking-wide text-white"
+          href="/dashboard"
+          className="text-base font-bold tracking-wide text-white flex items-center gap-2"
         >
-          CAREERMIND
+          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-tr from-violet-600 to-cyan-500 text-[10px] font-black text-white">
+            CM
+          </span>
+          <span>CAREERMIND</span>
         </Link>
 
         <button
