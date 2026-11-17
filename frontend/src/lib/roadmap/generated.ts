@@ -132,6 +132,18 @@ export function mergeGeneratedRoadmaps(roadmaps: Roadmap[]): void {
   }
 }
 
+/** Remove a generated roadmap from the client store and notify subscribers. */
+export function removeGeneratedRoadmap(slug: string): void {
+  const state = getState();
+  if (slug in state) {
+    const next = { ...state };
+    delete next[slug];
+    cache = next;
+    persist(cache);
+    emit();
+  }
+}
+
 /**
  * Subscribe a component to the generated-roadmap store. Use the result as a
  * dependency so a roadmap saved mid-session (generate button, cross-device

@@ -452,10 +452,37 @@ export default function QuizPage() {
                 <Button
                   onClick={generateQuiz}
                   disabled={generating || !aiSkill.trim()}
+                  className="!rounded-xl !bg-gradient-to-r !from-violet-600 !to-cyan-500 !px-5 !py-2.5 font-semibold !text-white hover:!from-violet-500 hover:!to-cyan-400 transition-all shadow-md shadow-violet-500/20"
                 >
-                  {generating ? "Generating…" : "Generate"}
+                  {generating ? (
+                    <span className="flex items-center gap-2">
+                      <svg className="h-4 w-4 animate-spin text-white" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                      </svg>
+                      <span>Generating…</span>
+                    </span>
+                  ) : (
+                    "Generate Quiz"
+                  )}
                 </Button>
               </div>
+
+              {generating && (
+                <div className="mt-4 flex items-center gap-3 rounded-xl border border-violet-500/30 bg-violet-950/20 p-3.5 shadow-lg animate-in fade-in duration-200">
+                  <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-600/30 border border-violet-400/40">
+                    <span className="h-4 w-4 rounded-full border-2 border-cyan-400 border-t-transparent animate-spin" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-violet-200">
+                      Crafting Custom Assessment Items with Advanced Career Mind AI...
+                    </p>
+                    <p className="text-[11px] text-slate-400">
+                      Generating distinct multiple-choice questions calibrated to your chosen skill & difficulty.
+                    </p>
+                  </div>
+                </div>
+              )}
             </Card>
           </div>
 

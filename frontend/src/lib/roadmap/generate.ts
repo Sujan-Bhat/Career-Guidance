@@ -1,7 +1,7 @@
 import { careerSlug } from "./slug";
 
 /**
- * Shared helpers for the "generate a roadmap with Gemini" flow — used by both
+ * Shared helpers for the "generate a roadmap with Advanced Career Mind AI" flow — used by both
  * entry points (Dashboard request box, roadmap ComingSoon fallback).
  */
 

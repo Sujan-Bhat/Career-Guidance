@@ -97,9 +97,22 @@ export default function ChatPage() {
             ))}
 
             {pending && (
-              <p className="self-start animate-pulse rounded-xl border border-slate-800 bg-slate-800/60 px-4 py-3 text-sm text-slate-400">
-                Thinking…
-              </p>
+              <div className="flex self-start items-center gap-3 rounded-2xl border border-violet-500/30 bg-violet-950/20 px-4 py-3 shadow-lg shadow-violet-950/20 animate-in fade-in duration-200">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-tr from-violet-600 to-cyan-500 text-xs font-bold text-white shadow-sm shadow-violet-500/20">
+                  ✦
+                </div>
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-semibold text-violet-300">Career Assistant is typing</span>
+                    <span className="flex gap-1 ml-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-bounce [animation-delay:-0.3s]" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-bounce [animation-delay:-0.15s]" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-bounce" />
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-slate-400">Synthesizing personalized advice from your study profile...</span>
+                </div>
+              </div>
             )}
 
             {error && (

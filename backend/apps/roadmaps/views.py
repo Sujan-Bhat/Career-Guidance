@@ -105,7 +105,9 @@ class MyGeneratedRoadmapsView(APIView):
 
 
 class GeneratedRoadmapView(APIView):
-    """GET /roadmaps/<slug> — one generated roadmap owned by the student."""
+    """GET /roadmaps/<slug> — one generated roadmap owned by the student.
+    DELETE /roadmaps/<slug> — delete one generated roadmap owned by the student.
+    """
 
     def get(self, request, slug: str):
         doc = GeneratedRoadmap.objects(
@@ -114,6 +116,15 @@ class GeneratedRoadmapView(APIView):
         if doc is None:
             return Response({"detail": "not found"}, status=404)
         return Response({"roadmap": doc.roadmap})
+
+    def delete(self, request, slug: str):
+        doc = GeneratedRoadmap.objects(
+            student=request.user.student_id, slug=slug
+        ).first()
+        if doc is None:
+            return Response({"detail": "not found"}, status=404)
+        doc.delete()
+        return Response({"detail": "deleted", "slug": slug}, status=200)
 
 
 def _now():

@@ -88,9 +88,10 @@ export default function ResumeAnalysisPage() {
         headers: { "Content-Type": "multipart/form-data" },
       });
       setResult(response.data);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const apiError = err as { response?: { data?: { detail?: string } } };
       setError(
-        err?.response?.data?.detail ??
+        apiError?.response?.data?.detail ??
           "Failed to analyze resume. Please verify your token and file."
       );
     } finally {
@@ -213,12 +214,50 @@ export default function ResumeAnalysisPage() {
               </div>
             )}
 
+            {loading && (
+              <div className="relative overflow-hidden rounded-2xl border border-violet-500/40 bg-gradient-to-r from-violet-950/40 via-indigo-950/40 to-slate-900/80 p-5 shadow-xl backdrop-blur-md animate-in fade-in duration-300">
+                <div className="absolute top-0 inset-x-0 h-0.5 bg-gradient-to-r from-transparent via-cyan-400 to-transparent animate-pulse" />
+                <div className="flex items-center gap-4">
+                  <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-violet-600/20 border border-violet-500/40">
+                    <div className="absolute inset-0 rounded-xl border-2 border-violet-400/50 border-t-transparent animate-spin" />
+                    <svg className="h-5 w-5 text-cyan-300 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full bg-cyan-400 animate-ping" />
+                      <p className="text-xs font-bold uppercase tracking-wider text-violet-300">
+                        AI Resume & ATS Parser Running
+                      </p>
+                    </div>
+                    <p className="text-xs text-slate-300 font-medium">
+                      Scanning technical keywords, calculating ATS score & detecting skill gaps...
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+                  <div className="h-full w-2/5 rounded-full bg-gradient-to-r from-violet-500 via-indigo-400 to-cyan-400 animate-[bounce_2s_infinite]" />
+                </div>
+              </div>
+            )}
+
             <Button
               type="submit"
               disabled={loading}
-              className="w-full !rounded-lg !bg-violet-600 !py-2.5 font-semibold !text-white hover:!bg-violet-500"
+              className="w-full !rounded-xl !bg-gradient-to-r !from-violet-600 !via-indigo-600 !to-cyan-500 !py-3 font-semibold !text-white shadow-lg shadow-violet-500/20 hover:!from-violet-500 hover:!to-cyan-400 active:scale-[0.98] transition-all"
             >
-              {loading ? "Analyzing Resume with AI…" : "Analyze Resume & Companies"}
+              {loading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <svg className="h-4 w-4 animate-spin text-white" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                  </svg>
+                  <span>Processing Analysis with Advanced Career Mind AI…</span>
+                </span>
+              ) : (
+                "Analyze Resume & Companies"
+              )}
             </Button>
           </form>
         </Card>

@@ -7,7 +7,7 @@ import { AI_TUTOR_ENABLED } from "@/lib/roadmap/flags";
  * `NEXT_PUBLIC_AI_TUTOR` feature flag is enabled; the input is a stub.
  */
 export function AiTutorPill() {
-  
+  if (!AI_TUTOR_ENABLED) return null;
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-5 z-40 flex justify-center px-4">

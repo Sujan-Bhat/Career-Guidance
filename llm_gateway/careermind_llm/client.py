@@ -133,6 +133,9 @@ class GeminiClient(LLMClient):
             "temperature": temperature,
             "max_output_tokens": max_tokens + GEMINI_THINKING_HEADROOM,
         }
+        if "json" in system.lower() or any("json" in m["content"].lower() for m in messages):
+            generation_config["response_mime_type"] = "application/json"
+
 
         last_error: Exception | None = None
         for model_name in self.models:
