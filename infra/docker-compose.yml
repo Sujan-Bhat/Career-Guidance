@@ -87,7 +87,9 @@ services:
         condition: service_healthy
 
   frontend:
-    build: ../frontend
+    build:
+      context: ../frontend
+      target: dev
     command: npm run dev
     environment:
       HOSTNAME: "0.0.0.0"

@@ -1,8 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "@/lib/api/client";
 import { Card } from "@/components/ui/Card";
+import { usePersistedState } from "@/lib/persistance/usePersistedState";
+import {
+  isJobRunning,
+  runBackgroundJob,
+  subscribeJob,
+} from "@/lib/persistance/resumeJobs";
 import { Button } from "@/components/ui/Button";
 import { ScoreRing } from "@/components/ui/ScoreRing";
 
@@ -47,20 +53,31 @@ interface AnalysisResult {
   resume_building_tips: string[];
   learning_roadmap: string[];
 }
+type SavedPdf = { name: string; dataUrl: string } | null;
 
 export default function ResumeAnalysisPage() {
-  const [file, setFile] = useState<File | null>(null);
-  const [pathwayId, setPathwayId] = useState("c01");
-  const [targetCompanies, setTargetCompanies] = useState("Google, Microsoft, Amazon");
-  const [selectedSkills, setSelectedSkills] = useState<string[]>([
-    "programming_python",
-    "databases_sql",
-  ]);
+const [file, setFile] = useState<File | null>(null); // Keep File in useState (browsers can't serialize PDF File objects)
+const [savedPdf, setSavedPdf] = usePersistedState<SavedPdf>("cm_resume_pdf", null);
+const [pathwayId, setPathwayId] = usePersistedState("cm_resume_pathway", "c01");
+const [targetCompanies, setTargetCompanies] = usePersistedState(
+  "cm_resume_companies",
+  "Google, Microsoft, Amazon"
+);
+const [selectedSkills, setSelectedSkills] = usePersistedState<string[]>(
+  "cm_resume_skills",
+  ["programming_python", "databases_sql"]
+);
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<AnalysisResult | null>(null);
-
+const [loading, setLoading] = useState(() => isJobRunning());
+useEffect(() => {
+  setLoading(isJobRunning());
+  return subscribeJob(() => setLoading(isJobRunning()));
+}, []);
+const [error, setError] = useState<string | null>(null);
+const [result, setResult] = usePersistedState<AnalysisResult | null>(
+  "cm_resume_result",
+  null
+);
   const toggleSkill = (skill: string) => {
     setSelectedSkills((prev) =>
       prev.includes(skill) ? prev.filter((s) => s !== skill) : [...prev, skill]
@@ -69,33 +86,37 @@ export default function ResumeAnalysisPage() {
 
   const handleAnalyze = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file) {
+    let pdfToSend = file;
+    if (!pdfToSend && savedPdf) {
+      const blob = await (await fetch(savedPdf.dataUrl)).blob();
+      pdfToSend = new File([blob], savedPdf.name, { type: "application/pdf" });
+    }
+    if (!pdfToSend) {
       setError("Please select a PDF resume file first.");
       return;
     }
 
-    setLoading(true);
     setError(null);
 
     const formData = new FormData();
-    formData.append("resume", file);
+    formData.append("resume", pdfToSend);
     formData.append("pathway_id", pathwayId);
     formData.append("target_companies", targetCompanies);
     formData.append("specified_skills", selectedSkills.join(","));
 
     try {
-      const response = await api.post("/api/v1/careers/resume-analysis", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      setResult(response.data);
+      const data = await runBackgroundJob<AnalysisResult>(
+        "/api/v1/careers/resume-analysis",
+        formData,
+        "cm_resume_result"
+      );
+      setResult(data);
     } catch (err: unknown) {
       const apiError = err as { response?: { data?: { detail?: string } } };
       setError(
         apiError?.response?.data?.detail ??
           "Failed to analyze resume. Please verify your token and file."
       );
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -134,13 +155,22 @@ export default function ResumeAnalysisPage() {
                     type="file"
                     accept=".pdf"
                     className="sr-only"
-                    onChange={(e) => setFile(e.target.files?.[0] || null)}
+                    onChange={(e) => {
+                      const picked = e.target.files?.[0];
+                      if (!picked) return;
+                      setFile(picked);
+                      const reader = new FileReader();
+                      reader.onload = () => {
+                        setSavedPdf({ name: picked.name, dataUrl: String(reader.result) });
+                      };
+                      reader.readAsDataURL(picked);
+                    }}
                   />
                   <label
                     htmlFor="resume-upload"
                     className="cursor-pointer font-medium text-violet-400 hover:text-violet-300"
                   >
-                    {file ? file.name : "Click to select a .pdf file"}
+                    {(file?.name ?? savedPdf?.name) || "Click to select a .pdf file"}
                   </label>
                   <p className="mt-1 text-xs text-slate-500">
                     PDF files only (maximum 5MB)
