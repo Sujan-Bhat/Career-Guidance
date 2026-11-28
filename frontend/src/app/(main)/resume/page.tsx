@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api } from "@/lib/api/client";
 import { Card } from "@/components/ui/Card";
 import { usePersistedState } from "@/lib/persistance/usePersistedState";
 import {

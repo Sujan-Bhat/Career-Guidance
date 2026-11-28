@@ -43,3 +43,31 @@ class QuizAttempt(Document):
     correct = fields.BooleanField(required=True)
     is_reattempt = fields.BooleanField(default=False)
     attempted_at = fields.DateTimeField(required=True)
+
+class CodingProblem(Document):
+    slug = fields.StringField(required=True, unique=True)
+    question_id = fields.StringField()
+    title = fields.StringField(required=True)
+    difficulty = fields.StringField(choices=("Easy", "Medium", "Hard"), required=True)
+    topic_tags = fields.ListField(fields.StringField())
+    content = fields.StringField()  # HTML description from LeetCode
+    starter_code = fields.DictField()  # {"python3": "...", "javascript": "..."}
+    example_testcases = fields.StringField()
+
+    meta = {"collection": "coding_problems", "allow_inheritance": False}
+
+
+class CodeSubmission(Document):
+    student = fields.StringField(required=True)
+    problem_slug = fields.StringField(required=True)
+    language = fields.StringField(required=True)
+    code = fields.StringField(required=True)
+    passed = fields.BooleanField(default=False)
+    source = fields.StringField(default="careermind")  # careermind | leetcode
+    submitted_at = fields.DateTimeField(required=True)
+
+    meta = {
+        "collection": "code_submissions",
+        "indexes": [("student", "problem_slug")],
+        "allow_inheritance": False,
+    }

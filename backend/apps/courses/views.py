@@ -1,6 +1,9 @@
 import re
 from datetime import datetime
-
+import os
+import requests
+from rest_framework.permissions import IsAuthenticated
+from .models import CodingProblem, CodeSubmission
 from mongoengine.errors import ValidationError as MongoValidationError
 from rest_framework import status
 from rest_framework.permissions import AllowAny
@@ -165,3 +168,104 @@ class QuizAttemptView(APIView):
             },
             status=status.HTTP_201_CREATED,
         )
+DETAIL_QUERY = """
+query questionData($titleSlug: String!) {
+  question(titleSlug: $titleSlug) {
+    content
+    exampleTestcases
+    codeSnippets { langSlug code }
+  }
+}
+"""
+
+
+class ProblemListView(APIView):
+    """Paginated list of coding problems with user's solved status."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        search = (request.query_params.get("search") or "").strip()
+        difficulty = (request.query_params.get("difficulty") or "").strip()
+        page = max(1, int(request.query_params.get("page", 1)))
+        limit = min(100, max(1, int(request.query_params.get("limit", 50))))
+
+        qs = CodingProblem.objects
+        if search:
+            qs = qs.filter(title__icontains=search)
+        if difficulty in ("Easy", "Medium", "Hard"):
+            qs = qs.filter(difficulty=difficulty)
+
+        total = qs.count()
+        items = list(
+            qs.skip((page - 1) * limit)
+            .limit(limit)
+            .only("slug", "question_id", "title", "difficulty", "topic_tags")
+        )
+
+        solved_slugs = set(
+            CodeSubmission.objects(student=request.user.student_id, passed=True).distinct("problem_slug")
+        )
+
+        return Response({
+            "total": total,
+            "page": page,
+            "problems": [
+                {
+                    "slug": p.slug,
+                    "question_id": p.question_id,
+                    "title": p.title,
+                    "difficulty": p.difficulty,
+                    "topic_tags": p.topic_tags,
+                    "solved": p.slug in solved_slugs,
+                }
+                for p in items
+            ],
+        })
+
+
+class ProblemDetailView(APIView):
+    """Full problem details (lazy-loads from LeetCode on first click and caches in MongoDB)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, slug):
+        problem = CodingProblem.objects(slug=slug).first()
+        if not problem:
+            return Response({"detail": "Problem not found"}, status=404)
+
+        if not problem.content:
+            url = os.getenv("LEETCODE_GRAPHQL_URL", "https://leetcode.com/graphql")
+            headers = {
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0",
+                "Referer": "https://leetcode.com",
+            }
+            try:
+                res = requests.post(
+                    url,
+                    json={"query": DETAIL_QUERY, "variables": {"titleSlug": slug}},
+                    headers=headers,
+                    timeout=10,
+                )
+                res.raise_for_status()
+                detail = (res.json().get("data") or {}).get("question") or {}
+                problem.content = detail.get("content") or ""
+                problem.example_testcases = detail.get("exampleTestcases") or ""
+                problem.starter_code = {
+                    s["langSlug"]: s["code"] for s in (detail.get("codeSnippets") or [])
+                }
+                problem.save()
+            except requests.RequestException:
+                return Response({"detail": "Failed to fetch problem details from LeetCode"}, status=502)
+
+        return Response({
+            "slug": problem.slug,
+            "question_id": problem.question_id,
+            "title": problem.title,
+            "difficulty": problem.difficulty,
+            "topic_tags": problem.topic_tags,
+            "content": problem.content,
+            "starter_code": problem.starter_code,
+            "example_testcases": problem.example_testcases,
+        })

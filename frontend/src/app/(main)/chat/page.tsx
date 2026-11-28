@@ -4,12 +4,13 @@ import { useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { endpoints } from "@/lib/api/client";
+import { usePersistedState } from "@/lib/persistance/usePersistedState";
 
 type Message = { role: "user" | "assistant"; content: string };
 
 export default function ChatPage() {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
+ const [messages, setMessages] = usePersistedState<Message[]>("cm_chat_messages", []);
+ const [input, setInput] = usePersistedState("cm_chat_input", "");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

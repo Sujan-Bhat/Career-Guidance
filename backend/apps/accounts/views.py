@@ -1,5 +1,6 @@
 from datetime import datetime
-
+import os
+import requests
 from mongoengine import NotUniqueError
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -16,7 +17,19 @@ from .serializers import (
     RegisterSerializer,
 )
 
-
+LEETCODE_QUERY = """
+query getUserProfile($username: String!) {
+  matchedUser(username: $username) {
+    username
+    submitStats: submitStatsGlobal {
+      acSubmissionNum {
+        difficulty
+        count
+      }
+    }
+  }
+}
+"""
 def _auth_response(profile: StudentProfile, status_code: int) -> Response:
     tokens = mint_tokens(profile.student_id)
     return Response(
@@ -125,3 +138,40 @@ class MeView(APIView):
                 setattr(request.user, field, serializer.validated_data[field])
         request.user.save()
         return Response(ProfileSerializer(request.user).data)
+
+class LeetCodeSyncView(APIView):
+    """Link and sync a student's public LeetCode stats."""
+    permission_classes = [IsAuthenticated]
+    def post(self, request):
+        username = str(request.data.get("username") or "").strip()
+        if not username:
+            return Response({"detail": "username is required"}, status=400)
+        url = os.getenv("LEETCODE_GRAPHQL_URL", "https://leetcode.com/graphql")
+        try:
+            res = requests.post(
+                url,
+                json={"query": LEETCODE_QUERY, "variables": {"username": username}},
+                headers={"Content-Type": "application/json"},
+                timeout=10,
+            )
+            res.raise_for_status()
+            user_data = (res.json().get("data") or {}).get("matchedUser")
+        except requests.RequestException:
+            return Response({"detail": "Failed to reach LeetCode"}, status=502)
+        if not user_data:
+            return Response({"detail": "LeetCode user not found"}, status=404)
+        counts = {
+            item["difficulty"]: item["count"]
+            for item in user_data["submitStats"]["acSubmissionNum"]
+        }
+        stats = {
+            "total": counts.get("All", 0),
+            "easy": counts.get("Easy", 0),
+            "medium": counts.get("Medium", 0),
+            "hard": counts.get("Hard", 0),
+            "synced_at": datetime.utcnow().isoformat(),
+        }
+        request.user.leetcode_username = username
+        request.user.leetcode_stats = stats
+        request.user.save()
+        return Response({"leetcode_username": username, "leetcode_stats": stats})

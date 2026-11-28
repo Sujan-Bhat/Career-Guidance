@@ -16,6 +16,7 @@ const NAV = [
   { href: "/chat", label: "Guidance Chat" },
   { href: "/resume", label: "Resume Analysis" },
   { href: "/profile", label: "Profile" },
+    { href: "/practice", label: "Practice" },
 ];
 
 const linkClasses = (active: boolean) =>

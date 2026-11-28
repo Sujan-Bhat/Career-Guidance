@@ -27,8 +27,7 @@ services:
       dockerfile: backend/Dockerfile
     # Dockerfile default is gunicorn + config.settings.prod; command/DEBUG
     # overrides here pin the stack to the audited prod configuration.
-    command: gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 120
-    env_file: ../.env
+    command: sh -c "python manage.py shell -c 'from apps.courses.models import CodingProblem; from django.core.management import call_command; CodingProblem.objects.count() == 0 and call_command(\"sync_leetcode_problems\")' && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 120"
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.prod
       DEBUG: "False"
@@ -90,7 +89,7 @@ services:
     build:
       context: ../frontend
       target: dev
-    command: npm run dev
+    command: sh -c "npm run build && npm run start"
     environment:
       HOSTNAME: "0.0.0.0"
       NEXT_PUBLIC_API_URL: http://localhost:8000

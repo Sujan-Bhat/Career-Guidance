@@ -7,4 +7,5 @@ urlpatterns = [
     path("login", views.LoginView.as_view()),
     path("refresh", views.RefreshView.as_view()),
     path("me", views.MeView.as_view()),
+    path("leetcode/sync", views.LeetCodeSyncView.as_view()),
 ]
