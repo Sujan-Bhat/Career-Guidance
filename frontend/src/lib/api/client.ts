@@ -151,4 +151,16 @@ export const endpoints = {
     /** Delete a generated roadmap by slug. */
     delete: (slug: string) => api.delete(`/api/v1/roadmaps/${slug}`),
   },
+    leetcode: {
+    /** Link and sync a student's public LeetCode solved stats. */
+    sync: (username: string) =>
+      api.post("/api/v1/accounts/leetcode/sync", { username }),
+  },
+    problems: {
+    /** Paginated coding problems with search, difficulty filter, and solved status. */
+    list: (params?: { page?: number; search?: string; difficulty?: string }) =>
+      api.get("/api/v1/courses/problems", { params }),
+    /** Single coding problem details (lazy-loads description & starter code). */
+    detail: (slug: string) => api.get(`/api/v1/courses/problems/${slug}`),
+  },
 };

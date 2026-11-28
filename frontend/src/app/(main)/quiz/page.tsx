@@ -7,6 +7,7 @@ import { endpoints, isLoggedIn } from "@/lib/api/client";
 import { useTracking } from "@/lib/tracking/TrackingProvider";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { usePersistedState } from "@/lib/persistance/usePersistedState";
 
 type QuizListItem = {
   quiz_id: string;
@@ -43,9 +44,9 @@ const COMMON_SKILLS = [
 export default function QuizPage() {
   const loggedIn = isLoggedIn();
   const { track, closeResource } = useTracking();
-  const [active, setActive] = useState<ActiveQuiz | null>(null);
-  const [answers, setAnswers] = useState<Record<number, number>>({});
-  const [results, setResults] = useState<Record<number, boolean> | null>(null);
+const [active, setActive] = usePersistedState<ActiveQuiz | null>("cm_quiz_active", null);
+const [answers, setAnswers] = usePersistedState<Record<number, number>>("cm_quiz_answers", {});
+const [results, setResults] = usePersistedState<Record<number, boolean> | null>("cm_quiz_results", null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

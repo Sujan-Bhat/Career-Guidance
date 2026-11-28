@@ -42,7 +42,8 @@ class StudentProfile(Document):
     latents = fields.DictField()
     career_outcome = fields.DictField()  # ground-truth label for the ensemble
     final_results = fields.ListField(fields.DictField())  # OULAD module results
-
+    leetcode_username = fields.StringField()
+    leetcode_stats = fields.DictField()
     meta = {"collection": "profiles", "allow_inheritance": False}
 
     @property

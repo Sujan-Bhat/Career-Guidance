@@ -28,7 +28,8 @@ class ProfileSerializer(serializers.Serializer):
     academic_records = serializers.SerializerMethodField()
     skill_assessments = serializers.SerializerMethodField()
     career_preferences = serializers.SerializerMethodField()
-
+    leetcode_username = serializers.CharField(required=False, allow_blank=True)
+    leetcode_stats = serializers.DictField(read_only=True)
     def _embedded(self, obj, field):
         return [
             {k: v for k, v in item.to_mongo().to_dict().items() if k != "_id"}

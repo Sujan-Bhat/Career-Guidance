@@ -26,6 +26,14 @@ type Profile = {
   academic_records: EmbeddedRecord[];
   skill_assessments: EmbeddedRecord[];
   career_preferences: EmbeddedRecord[];
+    leetcode_username?: string;
+  leetcode_stats?: {
+    total: number;
+    easy: number;
+    medium: number;
+    hard: number;
+    synced_at?: string;
+  };
 };
 
 type FesBadge = {
@@ -48,7 +56,9 @@ export default function ProfilePage() {
     "idle" | "saving" | "saved" | "error"
   >("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
-
+  const [lcUsername, setLcUsername] = useState("");
+  const [lcSyncing, setLcSyncing] = useState(false);
+  const [lcError, setLcError] = useState<string | null>(null);
   const load = useCallback(async () => {
     try {
       const { data } = await endpoints.auth.me();
@@ -139,6 +149,19 @@ export default function ProfilePage() {
     );
   }
 
+  const handleSyncLeetcode = async () => {
+    if (!lcUsername.trim()) return;
+    setLcSyncing(true);
+    setLcError(null);
+    try {
+      const { data } = await endpoints.leetcode.sync(lcUsername.trim());
+      setProfile((prev) => (prev ? { ...prev, ...data } : prev));
+    } catch {
+      setLcError("Could not find that LeetCode username.");
+    } finally {
+      setLcSyncing(false);
+    }
+  };
   const dirty =
     fullName !== (profile.full_name ?? "") ||
     programme !== (profile.programme ?? "") ||
@@ -345,6 +368,52 @@ export default function ProfilePage() {
               </ul>
             )}
           </Card>
+          <Card title="LeetCode Profile" className={`${cardStyle} min-w-0 overflow-hidden`}>
+  <div className="flex w-full min-w-0 flex-col gap-4">
+    <div className="flex w-full min-w-0 flex-wrap gap-2">
+      <input
+        type="text"
+        value={lcUsername}
+        onChange={(e) => setLcUsername(e.target.value)}
+        placeholder="Enter LeetCode username"
+        className="w-full min-w-0 flex-1 basis-40 rounded-lg border border-slate-800 bg-[#0B1020] px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-violet-500 focus:outline-none"
+      />
+      <Button
+        type="button"
+        onClick={handleSyncLeetcode}
+        disabled={lcSyncing}
+        className="shrink-0 whitespace-nowrap max-sm:w-full"
+      >
+        {lcSyncing ? "Syncing..." : "Link & Sync"}
+      </Button>
+    </div>
+
+    {lcError && <p className="text-xs text-rose-400">{lcError}</p>}
+
+    {!profile?.leetcode_stats ? (
+      <p className="text-sm text-slate-500">No LeetCode account linked yet.</p>
+    ) : (
+      <ul className="space-y-3 text-sm">
+        {[
+          { label: "Total Solved", value: profile.leetcode_stats.total },
+          { label: "Easy", value: profile.leetcode_stats.easy },
+          { label: "Medium", value: profile.leetcode_stats.medium },
+          { label: "Hard", value: profile.leetcode_stats.hard },
+        ].map((item) => (
+          <li
+            key={item.label}
+            className="flex justify-between gap-3 border-b border-slate-800 pb-3 last:border-0 last:pb-0"
+          >
+            <span className="text-slate-300">{item.label}</span>
+            <span className="font-semibold tabular-nums text-slate-100">
+              {item.value}
+            </span>
+          </li>
+        ))}
+      </ul>
+    )}
+  </div>
+</Card>
         </div>
       </div>
     </div>
